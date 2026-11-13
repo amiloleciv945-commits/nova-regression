@@ -1,0 +1,53 @@
+{
+  "id": "case1",
+  "name": "标准案例1：力驱动质量块与弹簧阻尼系统",
+  "source": "base_example(1)/base_example/case1；连接按随包Model1.mo核对，FMU哈希与原案例库相同；参考CSV来自同一包",
+  "settings_source": "依据案例负责人转发的2026年3月28日记录：case1、case3步长0.002秒，case5步长0.0001秒，均运行1秒。随包CSV采样更密，仅比较本次同时间点，不平移。",
+  "step_size": 0.002,
+  "steps": 500,
+  "timeout_seconds": 60,
+  "models": {
+    "fmu1": "data/regression/case1_bundle_20261113/base_example_case1_fmu1.fmu",
+    "fmu2": "data/regression/case1_bundle_20261113/base_example_case1_fmu2.fmu"
+  },
+  "connections": [
+    [
+      "fmu1::s1",
+      "fmu2::s1"
+    ],
+    [
+      "fmu1::v1",
+      "fmu2::v1"
+    ],
+    [
+      "fmu2::f1",
+      "fmu1::f1"
+    ]
+  ],
+  "outputs": [
+    "fmu1::s1",
+    "fmu1::v1",
+    "fmu2::f1",
+    "fmu2::s1",
+    "fmu2::v1"
+  ],
+  "reference": {
+    "file": "data/regression/case1_bundle_20261113/case1.csv",
+    "sha256": "3eab4282cc5352e383ce4d8f82bbcd5ced81082d38ba2160aafff7907720a6d9",
+    "source": "案例负责人提供的base_example(1)/base_example/case1/case1.csv；按原列的实例及变量比较，未另行生成基准",
+    "time_column": "Time(s)",
+    "time_alignment": "actual_times",
+    "variables": [
+      "fmu2::s1",
+      "fmu2::v1",
+      "fmu2::f1"
+    ],
+    "columns": {
+      "fmu2::s1": "fMU_base_example_case1_fmu2_1.s1(m)",
+      "fmu2::v1": "fMU_base_example_case1_fmu2_1.v1(m/s)",
+      "fmu2::f1": "fMU_base_example_case1_fmu2_1.f1(N)"
+    },
+    "atol": null,
+    "rtol": null
+  }
+}

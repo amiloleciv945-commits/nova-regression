@@ -1,0 +1,20 @@
+{
+  "id": "case4",
+  "name": "标准案例4：热容直接与逆模型耦合",
+  "source": "测试案例库(1)/标准测试案例/case4；连接关系见案例说明.tex 第四节",
+  "settings_source": "两个 FMU 的 DefaultExperiment：起始0秒、终止1秒、步长0.002秒",
+  "step_size": 0.002,
+  "steps": 500,
+  "timeout_seconds": 60,
+  "models": {
+    "fmu1": "data/regression/case4/base_example_case4_fmu1.fmu",
+    "fmu2": "data/regression/case4/base_example_case4_fmu2.fmu"
+  },
+  "connections": [
+    ["fmu1::T", "fmu2::T"],
+    ["fmu1::dT", "fmu2::dT"],
+    ["fmu2::Q_flow", "fmu1::Q_flow"]
+  ],
+  "outputs": ["fmu1::T", "fmu1::dT", "fmu2::Q_flow"],
+  "reference": null
+}

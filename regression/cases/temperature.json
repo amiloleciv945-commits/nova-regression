@@ -1,0 +1,12 @@
+{
+  "id": "temperature",
+  "name": "NOVA自带温控模型（运行环境检查）",
+  "source": "nova723/examples/controlled_temperature/controlled_temperature.py",
+  "step_size": 0.02,
+  "steps": 500,
+  "timeout_seconds": 60,
+  "models": {"model": "data/fmus/2.0/20sim/ControlledTemperature.fmu"},
+  "connections": [],
+  "outputs": ["model::Temperature_Reference", "model::Temperature_Room"],
+  "reference": null
+}
