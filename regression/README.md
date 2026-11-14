@@ -11,7 +11,7 @@ python regression/run.py --list
 python regression/run.py --case case1 --case case3 --case case5
 ```
 
-`--case` 可重复提供，省略时运行目录中的全部案例配置。当前在 Windows 上使用仓库内的 `nova_sim_py/binaries/libnova_simc.dll` v0.5.8 和 64 位 Python 3.14.7 验证。脚本使用 Python 标准库。绘图需要 Windows PowerShell 5.1 与 .NET 图表库，绘图失败时仍保留数值比较和 `plot.log`。
+`--case` 可重复提供，省略时运行目录中的全部案例配置。当前在 Windows 上使用仓库内的 `nova_sim_py/binaries/libnovac.dll` v0.1.0（nova723 随包版本） 和 64 位 Python 3.14.7 验证。脚本使用 Python 标准库。绘图需要 Windows PowerShell 5.1 与 .NET 图表库，绘图失败时仍保留数值比较和 `plot.log`。
 
 ## 准备案例文件
 
@@ -34,7 +34,7 @@ case1、case3 的步长为 0.002 秒，case5 的步长为 0.0001 秒，均运行
 - `case.json`、`result.csv`、`result.json` 和 `run.log`，分别记录配置、时序数据、状态及运行日志。
 - 配置参考 CSV 时，还会保存 `reference.csv`、`comparison.csv`、`comparison.json`。Windows 绘图成功后可查看 `comparison-*.png`。
 
-退出码 `0` 表示所选案例均通过配置的数值比较，`1` 表示至少有失败或超时，`2` 表示仍有已运行但精度待判定或日志需检查的案例。对于「运行完成，日志需检查」，打开对应的 `run.log`。本机试跑中记录了 FMU 临时目录清理警告，case5 还记录到液压模型的低压提示。数值比较及其状态仍可在结果中查看。
+退出码 `0` 表示所选案例均通过配置的数值比较，`1` 表示至少有失败或超时，`2` 表示仍有已运行但精度待判定或日志需检查的案例。对于「运行完成，日志需检查」，打开对应的 `run.log`。旧运行库试跑曾记录 FMU 临时目录清理警告；case5 还可能记录液压模型的低压提示。具体以本次日志为准。数值比较及其状态仍可在结果中查看。
 
 ## 增加案例
 
@@ -63,3 +63,11 @@ python -B -m unittest discover -s regression -p 'test_*.py' -v
 ```
 
 `regression/` 中的代码、配置及说明用于版本管理。`data/regression/` 中的本地输入和 `results/regression/` 中的输出由 Git 忽略。
+
+## 整数、布尔值和字符串传递
+
+```powershell
+python regression/check_type_transfer.py
+```
+
+该独立脚本使用仓库自带的 FMI 1.0 identity 模型，在当前仓库的 nova723 运行库上验证两个实例之间的三类传递，并运行断开连接的对照组。退出码 0 表示两组检查均通过，1 表示失败。默认不需要另一个工作副本，也不需要补充案例文件。详细范围见 [DATA_TRANSFER_CHECK.md](DATA_TRANSFER_CHECK.md)。

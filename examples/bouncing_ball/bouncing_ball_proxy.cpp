@@ -1,14 +1,14 @@
 
-#include "ecos/simulation.hpp"
-#include "ecos/structure/simulation_structure.hpp"
-#include <ecos/algorithm/fixed_step_algorithm.hpp>
-#include <ecos/listeners/csv_writer.hpp>
-#include <ecos/logger/logger.hpp>
-#include <ecos/util/plotter.hpp>
+#include "nova/engine/nova_engine.hpp"
+#include "nova/components/structure/simulation_structure.hpp"
+#include "nova/components/algorithm/fixed_step_algorithm.hpp"
+#include "nova/components/recorder/csv_recorder.hpp"
+#include "nova/components/logger/logger.hpp"
+#include "nova/components/util/chart_plotter.hpp"
 
 #include <iostream>
 
-using namespace nova_sim;
+using namespace nova;
 
 int main()
 {
@@ -23,7 +23,7 @@ int main()
         ss.add_model("bouncing_ball", "proxyfmu:://localhost?file=" + fmuPath);
 
         const auto sim = ss.load(std::make_unique<fixed_step_algorithm>(1.0 / 60));
-        sim->add_listener("csv_writer", std::make_unique<csv_writer>(resultFile));
+        sim->add_listener("csv_recorder", std::make_unique<csv_recorder>(resultFile));
 
         sim->init();
         sim->step_for(10);

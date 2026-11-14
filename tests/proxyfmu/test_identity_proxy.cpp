@@ -7,7 +7,7 @@
 namespace
 {
 
-void test(nova_fmi::fmu& fmu)
+void test(fmilibcpp::fmu& fmu)
 {
     const auto d = fmu.get_model_description();
     CHECK(d.modelName == "no.viproma.demo.identity");
@@ -19,7 +19,7 @@ void test(nova_fmi::fmu& fmu)
     REQUIRE(slave->enter_initialization_mode());
     REQUIRE(slave->exit_initialization_mode());
 
-    std::vector<nova_fmi::value_ref> vr{0};
+    std::vector<fmilibcpp::value_ref> vr{0};
 
     std::vector<double> realVal{0.0};
     std::vector<int> integerVal{0};
@@ -71,6 +71,6 @@ void test(nova_fmi::fmu& fmu)
 TEST_CASE("proxy_test_identity")
 {
     std::string fmuPath = std::string(DATA_FOLDER) + "/fmus/1.0/identity.fmu";
-    auto fmu = nova_sim::proxy::proxy_fmu(fmuPath);
+    auto fmu = nova::proxy::proxy_fmu(fmuPath);
     test(fmu);
 }

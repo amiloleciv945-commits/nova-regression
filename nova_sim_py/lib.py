@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from ctypes import CDLL, Structure, c_char_p, c_int, c_void_p, c_double, c_bool, byref
+from ctypes import CDLL, Structure, c_char_p, c_int
 
 
 def load_library():
@@ -8,7 +8,13 @@ def load_library():
         return ".dll" if os.name == "nt" else ".so"
 
     bin_folder = str((Path(__file__).parent / 'binaries').resolve())
-    lib_name = f"libnova_simc{suffix()}"
+    lib_name = f"libnovac{suffix()}"
+
+    current_path = os.environ.get("PATH", "")
+
+    # Add the executable directory to the PATH if not already present
+    if bin_folder not in current_path:
+        os.environ["PATH"] = bin_folder + os.pathsep + current_path
 
     if os.name == "nt":
         with os.add_dll_directory(bin_folder):
@@ -27,21 +33,24 @@ class Version(Structure):
         return f"v{self.major}.{self.minor}.{self.patch}"
 
 
-class EcosLib:
+class NovaLib:
 
     @staticmethod
     def version():
-        major = c_int()
-        minor = c_int()
-        patch = c_int()
-        dll.nova_library_version(byref(major), byref(minor), byref(patch))
-        v = Version()
-        v.major = major.value
-        v.minor = minor.value
-        v.patch = patch.value
-        return v
+        version_fun = dll.nova_library_version
+        version_fun.restype = Version
+        return dll.nova_library_version()
+
+    @staticmethod
+    def get_last_error():
+        get_last_error_msg = dll.nova_last_error_msg
+        get_last_error_msg.restype = c_char_p
+        err = get_last_error_msg()
+        return err.decode()
 
     @staticmethod
     def set_log_level(lvl: str):
-        # Implementation in nova_ecos.cpp pending or use direct spdlog if exposed
-        pass
+        set_log_level = dll.nova_set_log_level
+        set_log_level.argtypes = [c_char_p]
+        set_log_level(lvl.encode())
+

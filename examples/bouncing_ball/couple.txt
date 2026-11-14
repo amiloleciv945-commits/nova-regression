@@ -1,12 +1,12 @@
 
-#include "ecos/simulation.hpp"
-#include "ecos/structure/simulation_structure.hpp"
-#include <ecos/algorithm/strong_coupling_algorithm.hpp> // ← 新增
-#include <ecos/listeners/csv_writer.hpp>
-#include <ecos/logger/logger.hpp>
-#include <ecos/util/plotter.hpp>
+#include "nova/engine/simulation.hpp"
+#include "nova/components/structure/simulation_structure.hpp"
+#include "nova/components/algorithm/strong_coupling_algorithm.hpp" // ← 新增
+#include "nova/components/recorder/csv_writer.hpp"
+#include "nova/components/logger/logger.hpp"
+#include "nova/components/util/plotter.hpp"
 
-using namespace ecos;
+using namespace nova;
 
 int main()
 {

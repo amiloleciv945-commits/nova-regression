@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.19)
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" PROJECT_VERSION)
-project("libecos" VERSION ${PROJECT_VERSION})
+project("libnova" VERSION ${PROJECT_VERSION})
 message("Current ${PROJECT_NAME} version: ${CMAKE_PROJECT_VERSION}\n")
 
 
@@ -9,11 +9,9 @@ message("Current ${PROJECT_NAME} version: ${CMAKE_PROJECT_VERSION}\n")
 # ==============================================================================
 
 option(BUILD_SHARED_LIBS OFF)
-option(ECOS_BUILD_TESTS "Build tests" ON)
-option(ECOS_BUILD_EXAMPLES "Build examples" OFF)
-option(ECOS_BUILD_CLI "Build CLI" ON)
-option(ECOS_BUILD_CLIB "Build C library (required for nova_sim_py)" ON)
-option(ECOS_WITH_PROXYFMU "Build with proxyfmu" ON)
+option(NOVA_BUILD_TESTS "Build tests" OFF)
+option(NOVA_BUILD_EXAMPLES "Build examples" ON)
+option(NOVA_BUILD_CLIB "Build C library (required for nova_sim_py)" ON)
 
 
 # ==============================================================================
@@ -30,6 +28,10 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}/bin>)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}/bin>)
 set(GENERATED_SRC_DIR "${CMAKE_BINARY_DIR}/generated")
 set(PY_BINARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/nova_sim_py/binaries")
+
+if (UNIX)
+    set(CMAKE_BUILD_RPATH "$ORIGIN")
+endif ()
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS_RELEASE "/O2")
@@ -54,17 +56,11 @@ include_directories(${THIRD_PARTY_INCLUDE_DIR})
 # === 添加 TBB 路径 ===
 include_directories(${THIRD_PARTY_INCLUDE_DIR}/oneTBB/include)
 link_directories(${THIRD_PARTY_INCLUDE_DIR}/oneTBB/lib/intel64/gcc4.8)
+set(NOVA_TBB_LIBRARY "${THIRD_PARTY_INCLUDE_DIR}/oneTBB/lib/intel64/gcc4.8/libtbb.so.12.16")
 
 include(FetchContent)
 
-if (ECOS_WITH_PROXYFMU)
-    set(SIMPLE_SOCKET_BUILD_TESTS OFF)
-    FetchContent_Declare(
-            SimpleSocket
-            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/SimpleSocket
-    )
-    FetchContent_MakeAvailable(SimpleSocket)
-endif ()
+
 
 set(FMI4C_BUILD_SHARED OFF)
 FetchContent_Declare(
@@ -79,18 +75,18 @@ FetchContent_MakeAvailable(fmi4c)
 # ==============================================================================
 
 add_subdirectory(src)
-add_subdirectory(tool)
 
 
-if (ECOS_BUILD_EXAMPLES)
-    # add_subdirectory(examples)
-    add_subdirectory(nova_example)
+
+if (NOVA_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif ()
 
-if (ECOS_BUILD_TESTS)
+if (NOVA_BUILD_TESTS)
+
     FetchContent_Declare(
             Catch2
-            URL https://github.com/catchorg/Catch2/archive/v3.4.0.zip
+            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/Catch2
     )
     FetchContent_MakeAvailable(Catch2)
 
@@ -104,31 +100,38 @@ endif ()
 # ==============================================================================
 
 configure_package_config_file(cmake/config.cmake.in
-        ${CMAKE_CURRENT_BINARY_DIR}/ecos-config.cmake
-        INSTALL_DESTINATION ${CMAKE_INSTALL_DATADIR}/ecos
+        ${CMAKE_CURRENT_BINARY_DIR}/nova-config.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_DATADIR}/nova
         NO_SET_AND_CHECK_MACRO)
 write_basic_package_version_file(
-        ${CMAKE_CURRENT_BINARY_DIR}/ecos-config-version.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/nova-config-version.cmake
         VERSION ${CMAKE_PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion)
 install(
         FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/ecos-config.cmake
-        ${CMAKE_CURRENT_BINARY_DIR}/ecos-config-version.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/nova-config.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/nova-config-version.cmake
         DESTINATION
-        ${CMAKE_INSTALL_DATADIR}/ecos)
+        ${CMAKE_INSTALL_DATADIR}/nova)
 
-install(TARGETS libecos libnova_simc ecos fmilibcpp
-        EXPORT ecos-targets
+install(
+        TARGETS libnova libnovac
+        EXPORT nova-targets
 )
-if (ECOS_WITH_PROXYFMU)
-    install(
-            TARGETS proxyfmu
-            EXPORT ecos-targets
-    )
+if (UNIX)
+    install(FILES ${NOVA_TBB_LIBRARY}
+            DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            RENAME libtbb.so.12)
 endif ()
+if (TARGET nova)
+    install(
+            TARGETS nova
+            EXPORT nova-targets
+    )
+endif()
+
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(EXPORT ecos-targets
-        NAMESPACE nova_sim::
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/ecos)
+install(EXPORT nova-targets
+        NAMESPACE nova::
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/nova)

@@ -1,32 +1,23 @@
-from ecospy import *
-from ecospy.plotter import *
+from nova_sim_py import *
+from nova_sim_py.chart_plotter import *
 
 from pathlib import Path
 
-class MyListener(SimulationListener):
 
-    def __init__(self, sim: EcosSimulation):
-        self.sim = sim
-
-    def pre(self, info: SimulationInfo):
-        print(f"pre invoked @ t={info.time}")
-        if info.time > 5:
-            self.sim.remove_listener(self.name)
-            print(f"Removed listener at t={info.time}")
 
 
 def main():
-    print(f"Ecoslib version: {EcosLib.version()}")
+    print(f"Novalib version: {NovaLib.version()}")
 
-    EcosLib.set_log_level("debug")
+    NovaLib.set_log_level("debug")
 
     ssp_dir = (Path(__file__).parent.parent.parent / 'data' / 'ssp' / '1.0' / 'quarter_truck').resolve()
+    ssp_file = f"{ssp_dir}/quarter-truck.ssp"
     result_file = f"results/python/quarter_truck.csv"
 
-    with (EcosSimulation(ssp_path=f"{ssp_dir}", step_size=1.0 / 100)) as sim:
+    with (NovaEngine(ssp_path=ssp_file, step_size=1.0 / 100)) as sim:
 
         sim.add_csv_writer(result_file, f"{ssp_dir}/CsvConfig.xml")
-        sim.add_listener("custom_listener", MyListener(sim))
 
         sim.init(parameter_set="initialValues")
         sim.step_until(time_point=10)
@@ -46,8 +37,8 @@ def main():
             y_label="Height[m]",
             identifiers=["ground::zGround"])
     ]
-    plotter = Plotter(result_file, configs)
-    plotter.show()
+    chart_plotter = Plotter(result_file, configs)
+    chart_plotter.show()
 
 
 if __name__ == "__main__":

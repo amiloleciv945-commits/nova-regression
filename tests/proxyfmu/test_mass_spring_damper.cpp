@@ -4,8 +4,8 @@
 
 #include <unordered_map>
 
-using namespace nova_fmi;
-using namespace nova_sim;
+using namespace fmilibcpp;
+using namespace nova;
 
 namespace
 {

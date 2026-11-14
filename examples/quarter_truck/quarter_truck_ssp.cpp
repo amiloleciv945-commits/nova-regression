@@ -1,16 +1,17 @@
-#include "ecos/algorithm/fixed_step_algorithm.hpp"
-#include "ecos/listeners/csv_writer.hpp"
-#include "ecos/logger/logger.hpp"
-#include "ecos/ssp/ssp_loader.hpp"
-#include "ecos/util/plotter.hpp"
+#include "nova/components/algorithm/fixed_step_algorithm.hpp"
+#include "nova/components/recorder/csv_recorder.hpp"
+#include "nova/components/logger/logger.hpp"
+#include "nova/components/ssp/ssp_loader.hpp"
+#include "nova/components/util/chart_plotter.hpp"
 
-#include <spdlog/stopwatch.h>
+#include <chrono>
+#include "nova/components/logger/nova_logger.hpp"
 
-using namespace ecos;
+using namespace nova;
 
 int main()
 {
-    log::set_logging_level(ecos::log::level::debug);
+    log::set_logging_level(nova::log::level::debug);
 
     const std::filesystem::path sspFolder = std::string(DATA_FOLDER) + "/ssp/1.0/quarter_truck";
 
@@ -18,18 +19,18 @@ int main()
         const auto ss = load_ssp(sspFolder);
         const auto sim = ss->load(std::make_unique<fixed_step_algorithm>(1.0 / 100));
 
-        auto csvWriter = std::make_unique<csv_writer>("results/quarter_truck.csv");
+        auto csvWriter = std::make_unique<csv_recorder>("results/quarter_truck.csv");
         const auto outputPath = csvWriter->output_path();
         csv_config& config = csvWriter->config();
         config.register_variable("chassis::zChassis");
         config.register_variable("wheel::zWheel");
         config.register_variable("ground::zGround");
-        sim->add_listener("csv_writer", std::move(csvWriter));
+        sim->add_listener("csv_recorder", std::move(csvWriter));
 
-        spdlog::stopwatch sw;
+        log::Stopwatch sw;
         sim->init("initialValues");
         sim->step_until(5);
-        log::info("Elapsed {:.4f}s", sw);
+        log::info("Elapsed {:.4f}s", sw.elapsed().count());
 
         sim->terminate();
 

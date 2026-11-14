@@ -201,32 +201,6 @@ def plot_comparison(folder):
     return {"files": charts, "script_sha256": digest(script)}
 
 
-def add_real_parameter_set(structure, name, parameters):
-    # The team DLL exposes parameter sets through its C API only.
-    from nova_sim_py.lib import dll
-
-    create = dll.nova_parameter_set_create
-    create.argtypes = []
-    create.restype = ctypes.c_void_p
-    add = dll.nova_parameter_set_add_real
-    add.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_double]
-    add.restype = None
-    attach = dll.nova_simulation_structure_add_parameter_set
-    attach.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
-    attach.restype = None
-    destroy = dll.nova_parameter_set_destroy
-    destroy.argtypes = [ctypes.c_void_p]
-    destroy.restype = None
-    parameter_set = create()
-    require(parameter_set, "无法创建 NOVA 参数组")
-    try:
-        for variable, value in parameters.items():
-            add(parameter_set, variable.encode(), float(value))
-        attach(structure._handle, name.encode(), parameter_set)
-    finally:
-        destroy(parameter_set)
-
-
 def worker(case_path, folder):
     if os.name == "nt":
         ctypes.windll.kernel32.SetErrorMode(3)  # Let the parent report native crashes without a blocking dialog.
@@ -243,21 +217,22 @@ def worker(case_path, folder):
         os.chdir(ROOT)
         sys.path.insert(0, str(ROOT))
         result["stage"] = "加载 NOVA"
-        from nova_sim_py import EcosLib, NovaSimulation, NovaSimulationStructure
-        result["library_version"] = str(EcosLib.version())
-        library = ROOT / "nova_sim_py/binaries" / ("libnova_simc.dll" if os.name == "nt" else "libnova_simc.so")
+        from nova_sim_py import NovaEngine, NovaLib, NovaSimulationStructure
+        result["library_version"] = str(NovaLib.version())
+        library = ROOT / "nova_sim_py/binaries" / ("libnovac.dll" if os.name == "nt" else "libnovac.so")
         result["library_sha256"] = digest(library)
         result["bindings_sha256"] = {p.name: digest(p) for p in sorted((ROOT / "nova_sim_py").glob("*.py"))}
+        NovaLib.set_log_level("info")
         with NovaSimulationStructure() as structure:
             result["stage"] = "加载模型和连接"
             for name, path in case["models"].items():
-                require(structure.add_model(name, path), f"NOVA 无法加载模型 {name}：{path}")
+                structure.add_model(name, path)
             for source, destination in case.get("connections", []):
-                structure.make_connection(*source.split("::", 1), *destination.split("::", 1))
+                structure.make_real_connection(source, destination)
             parameters = case.get("parameters", {})
             if parameters:
-                add_real_parameter_set(structure, "regression", parameters)
-            with NovaSimulation(structure=structure, step_size=case["step_size"]) as sim:
+                structure.add_parameter_set("regression", {k: float(v) for k, v in parameters.items()})
+            with NovaEngine(structure=structure, step_size=case["step_size"]) as sim:
                 result["stage"] = "初始化"
                 require(sim.init(parameter_set="regression" if parameters else None), "NOVA 初始化返回失败")
                 result["stage"] = "步进和记录"
@@ -282,6 +257,7 @@ def worker(case_path, folder):
                             bounds["last"] = value
                         writer.writerow([current, *values])
                 result["stage"] = "终止"
+                sim.terminate()
         result.update(samples=case["steps"] + 1, final_time=current, step_size=case["step_size"])
         reference = case.get("reference")
         if reference:

@@ -1,0 +1,14 @@
+
+#include "nova/api/lib_info.hpp"
+
+namespace nova
+{
+
+version library_version()
+{
+    // clang-format off
+    return { @PROJECT_VERSION_MAJOR@, @PROJECT_VERSION_MINOR@, @PROJECT_VERSION_PATCH@ };
+    // clang-format on
+}
+
+}

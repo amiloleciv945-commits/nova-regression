@@ -1,13 +1,12 @@
+
 #include "fmilibcpp/fmu.hpp"
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-using namespace nova_fmi;
-
 namespace
 {
 
-void test(fmu& fmu)
+void test(fmilibcpp::fmu& fmu)
 {
     const auto d = fmu.get_model_description();
     CHECK(d.modelName == "BouncingBall");
@@ -19,10 +18,7 @@ void test(fmu& fmu)
     REQUIRE(slave->enter_initialization_mode());
     REQUIRE(slave->exit_initialization_mode());
 
-    // VR for h is typically 0 or 1. Let's use dynamic lookup
-    auto var_opt = d.get_variable("h");
-    REQUIRE(var_opt != nullptr);
-    uint32_t vr = var_opt->vr;
+    std::vector<fmilibcpp::value_ref> vr{0};
 
     std::vector<double> realRef(1);
 
@@ -32,14 +28,19 @@ void test(fmu& fmu)
 
     double h;
     while (t <= tEnd) {
+
+
         REQUIRE(slave->step(t, dt));
-        h = slave->get_real(vr);
+
+        h = slave->get_real(1);
+
         t += dt;
     }
 
     CHECK(h == Catch::Approx(0.0235492));
 
     REQUIRE(slave->terminate());
+    slave->freeInstance();
 }
 
 } // namespace
@@ -47,7 +48,6 @@ void test(fmu& fmu)
 TEST_CASE("fmi_test_bouncingball")
 {
     std::string fmuPath = std::string(DATA_FOLDER) + "/fmus/3.0/ref/BouncingBall.fmu";
-    const auto fmu = loadFmu(fmuPath);
-    REQUIRE(fmu);
+    const auto fmu = fmilibcpp::loadFmu(fmuPath);
     test(*fmu);
 }

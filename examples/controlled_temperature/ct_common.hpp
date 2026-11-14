@@ -1,16 +1,16 @@
 
-#ifndef LIBECOS_CT_COMMON_HPP
-#define LIBECOS_CT_COMMON_HPP
+#ifndef LIBNOVA_CT_COMMON_HPP
+#define LIBNOVA_CT_COMMON_HPP
 
-#include "ecos/algorithm/fixed_step_algorithm.hpp"
-#include "ecos/listeners/csv_writer.hpp"
-#include "ecos/logger/logger.hpp"
-#include "ecos/model_resolver.hpp"
-#include "ecos/simulation.hpp"
-#include "ecos/util/plotter.hpp"
+#include "nova/components/algorithm/fixed_step_algorithm.hpp"
+#include "nova/components/recorder/csv_recorder.hpp"
+#include "nova/components/logger/logger.hpp"
+#include "nova/engine/nova_fmu_locator.hpp"
+#include "nova/engine/nova_engine.hpp"
+#include "nova/components/util/chart_plotter.hpp"
 
 
-using namespace ecos;
+using namespace nova;
 
 inline double kelvi2deg(double k)
 {
@@ -22,14 +22,14 @@ inline int run(const std::filesystem::path& fmuPath, bool remoting)
     set_logging_level(log::level::debug);
 
     try {
-        const auto resolver = default_model_resolver();
-        const auto fmuModel = resolver->resolve(remoting ? ("proxyfmu://localhost?file=" + fmuPath.string()) : fmuPath.string());
+        auto locator = std::make_unique<nova_fmu_locator>();
+        const auto fmuModel = locator->locate(std::filesystem::current_path(), remoting ? ("proxyfmu://localhost?file=" + fmuPath.string()) : fmuPath.string());
 
         if (!fmuModel) {
             return 1;
         }
 
-        simulation sim(std::make_unique<fixed_step_algorithm>(1.0 / 50));
+        nova_engine sim(std::make_unique<fixed_step_algorithm>(1.0 / 50));
         sim.add_slave(fmuModel->instantiate("slave"));
 
         const auto t_room = sim.get_real_property("slave::Temperature_Room");
@@ -38,9 +38,9 @@ inline int run(const std::filesystem::path& fmuPath, bool remoting)
         const auto t_ref = sim.get_real_property("slave::Temperature_Reference");
         t_ref->set_output_modifier(kelvi2deg);
 
-        auto csvWriter = std::make_unique<csv_writer>("results/controlled_temperature.csv");
+        auto csvWriter = std::make_unique<csv_recorder>("results/controlled_temperature.csv");
         const auto outputPath = csvWriter->output_path();
-        sim.add_listener("csv_writer", std::move(csvWriter));
+        sim.add_listener("csv_recorder", std::move(csvWriter));
 
         sim.init();
         sim.step_for(10);
@@ -57,4 +57,4 @@ inline int run(const std::filesystem::path& fmuPath, bool remoting)
     return 0;
 }
 
-#endif // LIBECOS_CT_COMMON_HPP
+#endif // LIBNOVA_CT_COMMON_HPP

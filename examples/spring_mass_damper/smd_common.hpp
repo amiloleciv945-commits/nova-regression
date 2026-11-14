@@ -2,15 +2,15 @@
 #ifndef SMD_COMMON_HPP
 #define SMD_COMMON_HPP
 
-#include "ecos/algorithm/fixed_step_algorithm.hpp"
-#include "ecos/logger/logger.hpp"
-#include "ecos/model_resolver.hpp"
-#include "ecos/simulation.hpp"
-#include "ecos/structure/simulation_structure.hpp"
-#include "ecos/listeners/csv_writer.hpp"
-#include "ecos/util/plotter.hpp"
+#include "nova/components/algorithm/fixed_step_algorithm.hpp"
+#include "nova/components/logger/logger.hpp"
+#include "nova/engine/nova_fmu_locator.hpp"
+#include "nova/engine/nova_engine.hpp"
+#include "nova/components/structure/simulation_structure.hpp"
+#include "nova/components/recorder/csv_recorder.hpp"
+#include "nova/components/util/chart_plotter.hpp"
 
-using namespace ecos;
+using namespace nova;
 
 inline void addConnections(simulation_structure& ss)
 {
@@ -42,9 +42,9 @@ inline void run(simulation_structure& ss)
     try {
 
         const auto sim = ss.load(std::make_unique<fixed_step_algorithm>(1.0 / 100));
-        auto csvWriter = std::make_unique<csv_writer>("results/mass_spring_damper.csv");
+        auto csvWriter = std::make_unique<csv_recorder>("results/spring_mass_damper.csv");
         const auto outputPath = csvWriter->output_path();
-        sim->add_listener("csv_writer", std::move(csvWriter));
+        sim->add_listener("csv_recorder", std::move(csvWriter));
 
         sim->init("initialValues");
         sim->step_until(10);

@@ -41,7 +41,7 @@ So what does Catch2 bring to the party that differentiates it from these? Apart 
 
 ## Who else is using Catch2?
 
-A whole lot of people. According to [the 2022 JetBrains C++ ecosystem survey](https://www.jetbrains.com/lp/devecosystem-2022/cpp/#Which-unit-testing-frameworks-do-you-regularly-use),
+A whole lot of people. According to [the 2022 JetBrains C++ novaystem survey](https://www.jetbrains.com/lp/devnovaystem-2022/cpp/#Which-unit-testing-frameworks-do-you-regularly-use),
 about 12% of C++ programmers use Catch2 for unit testing, making it the
 second most popular unit testing framework.
 

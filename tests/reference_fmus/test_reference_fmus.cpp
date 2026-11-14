@@ -1,16 +1,16 @@
+
 #include <catch2/catch_test_macros.hpp>
 
-#include "ecos/nova_fmu_locator.hpp"
-#include "ecos/simulation.hpp"
-#include <ecos/algorithm/fixed_step_algorithm.hpp>
-#include <ecos/structure/simulation_structure.hpp>
+#include "nova/engine/model_resolver.hpp"
+#include "nova/engine/simulation.hpp"
+#include "nova/components/algorithm/fixed_step_algorithm.hpp"
+#include "nova/components/structure/simulation_structure.hpp"
 
-using namespace nova_sim;
+using namespace nova;
 
 std::vector<std::filesystem::path> collectFMus(const std::filesystem::path& basePath)
 {
     std::vector<std::filesystem::path> paths;
-    if (!std::filesystem::exists(basePath)) return paths;
     for (const auto& entry : std::filesystem::directory_iterator(basePath)) {
         if (entry.is_regular_file()) {
             if (entry.path().extension() == ".fmu") {
@@ -38,27 +38,26 @@ std::vector<std::filesystem::path> v3FMus()
 
 void run(const std::vector<std::filesystem::path>& paths)
 {
+    const auto resolver = default_model_resolver();
     for (const auto& path : paths) {
-        auto fmuModel = NovaFmuLocator::resolve(path.string());
-        if (!fmuModel) continue;
+        auto fmuModel = resolver->resolve(path.string());
+        REQUIRE(fmuModel);
 
         simulation sim(std::make_unique<fixed_step_algorithm>(1.0 / 100));
-        auto slave = fmuModel->instantiate(path.stem().string(), std::nullopt);
-        if (!slave) continue;
-        
+        auto slave = fmuModel->instantiate(path.stem().string());
+        REQUIRE(slave);
         sim.add_slave(std::move(slave));
-        try {
-            sim.init();
-            sim.step(5);
-            sim.terminate();
-        } catch(...) {}
+
+        sim.init();
+        sim.step_for(5);
+        sim.terminate();
     }
 }
 
 TEST_CASE("Run reference fmus")
 {
+
     run(v1FMus());
     run(v2FMus());
     run(v3FMus());
-    CHECK(true);
 }

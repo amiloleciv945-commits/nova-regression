@@ -1,28 +1,25 @@
 #include <catch2/catch_test_macros.hpp>
-#include "fmilibcpp/fmu.hpp"
 
-using namespace nova_fmi;
+#include "fmilibcpp/fmu.hpp"
 
 namespace
 {
 
-void test(nova_fmi::fmu& fmu)
+void test(fmilibcpp::fmu& fmu)
 {
     const auto d = fmu.get_model_description();
     CHECK(d.modelName == "no.viproma.demo.identity");
+    CHECK(d.description ==
+        "Has one input and one output of each type, and outputs are always set equal to inputs");
 
     auto slave = fmu.new_instance("instance");
-    REQUIRE(slave != nullptr);
+    REQUIRE(slave);
     REQUIRE(slave->enter_initialization_mode());
     REQUIRE(slave->exit_initialization_mode());
 
-    std::vector<value_ref> vr{0}; // Often 0 for input/output in this FMU
-    
-    // We should look up the variable by name "input" to be robust
-    auto var_opt = d.get_variable("input");
-    if (var_opt) vr[0] = var_opt->vr;
+    std::vector<fmilibcpp::value_ref> vr{0};
 
-    std::vector<double> realVal{123.45};
+    std::vector<double> realVal{0.0};
     std::vector<int> integerVal{0};
     std::vector<bool> booleanVal{false};
     std::vector<std::string> stringVal{""};
@@ -37,10 +34,16 @@ void test(nova_fmi::fmu& fmu)
     double dt = 0.1;
 
     while (t <= tEnd) {
+
         slave->get_real(vr, realRef);
         slave->get_integer(vr, integerRef);
         slave->get_boolean(vr, booleanRef);
         slave->get_string(vr, stringRef);
+
+        CHECK(realVal[0] == realRef[0]);
+        CHECK(integerVal[0] == integerRef[0]);
+        CHECK(booleanVal[0] == booleanRef[0]);
+        CHECK(stringVal[0] == stringRef[0]);
 
         REQUIRE(slave->step(t, dt));
 
@@ -58,6 +61,7 @@ void test(nova_fmi::fmu& fmu)
     }
 
     REQUIRE(slave->terminate());
+    slave->freeInstance();
 }
 
 } // namespace
@@ -65,7 +69,6 @@ void test(nova_fmi::fmu& fmu)
 TEST_CASE("fmi_test_identity")
 {
     std::string fmuPath = std::string(DATA_FOLDER) + "/fmus/1.0/identity.fmu";
-    auto fmu = loadFmu(fmuPath);
-    REQUIRE(fmu != nullptr);
+    auto fmu = fmilibcpp::loadFmu(fmuPath);
     test(*fmu);
 }
