@@ -141,6 +141,11 @@ public:
         slave_->step(currentTime, stepSize);
     }
 
+    bool try_step(double currentTime, double stepSize) override
+    {
+        return slave_->step(currentTime, stepSize);
+    }
+
     void terminate() override
     {
         slave_->terminate();

@@ -12,7 +12,7 @@
 
 using namespace nova;
 
-struct nova_engine::Impl
+struct nova_engine::Impl : algorithm_connections
 {
     struct ResolvedDataLink {
         std::string type;
@@ -39,37 +39,62 @@ struct nova_engine::Impl
     std::vector<std::unique_ptr<model_instance>> instances_;
     std::vector<NovaDataLink> links_;
     std::vector<ResolvedDataLink> resolved_links_;
+    std::unordered_map<model_instance*, std::vector<std::size_t>> incoming_links_;
     std::unordered_map<std::string, std::shared_ptr<engine_observer>> listeners_;
 
     nova_engine& sim_;
 
-    void transfer_data()
+    static void transfer_link(const ResolvedDataLink& rlink)
     {
-        for (const auto& rlink : resolved_links_) {
-            if (rlink.type == "real") {
-                if (rlink.src_real && rlink.dst_real) {
-                    double val = rlink.src_real->get_value();
-                    if (rlink.real_modifier) val = rlink.real_modifier(val);
-                    rlink.dst_real->set_value(val);
-                }
-            } else if (rlink.type == "int") {
-                if (rlink.src_int && rlink.dst_int) {
-                    rlink.dst_int->set_value(rlink.src_int->get_value());
-                }
-            } else if (rlink.type == "bool") {
-                if (rlink.src_bool && rlink.dst_bool) {
-                    rlink.dst_bool->set_value(rlink.src_bool->get_value());
-                }
-            } else if (rlink.type == "string") {
-                if (rlink.src_string && rlink.dst_string) {
-                    rlink.dst_string->set_value(rlink.src_string->get_value());
-                }
-            } else if (rlink.type == "vector") {
-                if (rlink.src_vector && rlink.dst_vector) {
-                    rlink.dst_vector->set_value(rlink.src_vector->get_value());
-                }
+        if (rlink.type == "real") {
+            if (rlink.src_real && rlink.dst_real) {
+                double val = rlink.src_real->get_value();
+                if (rlink.real_modifier) val = rlink.real_modifier(val);
+                rlink.dst_real->set_value(val);
+            }
+        } else if (rlink.type == "int") {
+            if (rlink.src_int && rlink.dst_int) {
+                rlink.dst_int->set_value(rlink.src_int->get_value());
+            }
+        } else if (rlink.type == "bool") {
+            if (rlink.src_bool && rlink.dst_bool) {
+                rlink.dst_bool->set_value(rlink.src_bool->get_value());
+            }
+        } else if (rlink.type == "string") {
+            if (rlink.src_string && rlink.dst_string) {
+                rlink.dst_string->set_value(rlink.src_string->get_value());
+            }
+        } else if (rlink.type == "vector") {
+            if (rlink.src_vector && rlink.dst_vector) {
+                rlink.dst_vector->set_value(rlink.src_vector->get_value());
             }
         }
+    }
+
+    void transfer_data()
+    {
+        for (const auto& link : resolved_links_) {
+            transfer_link(link);
+        }
+    }
+
+    void transfer_inputs(model_instance& destination) override
+    {
+        const auto incoming = incoming_links_.find(&destination);
+        if (incoming != incoming_links_.end()) {
+            for (const auto index : incoming->second) {
+                transfer_link(resolved_links_[index]);
+            }
+        }
+    }
+
+    void synchronize() override
+    {
+        transfer_data();
+        std::for_each(std::execution::par, instances_.begin(), instances_.end(), [](auto& instance) {
+            instance->get_properties().apply_sets();
+            instance->get_properties().apply_gets();
+        });
     }
 
     explicit Impl(nova_engine& sim, std::unique_ptr<algorithm> algorithm)
@@ -92,14 +117,7 @@ struct nova_engine::Impl
 
             scenario_.apply(currentTime_);
 
-            newT = algorithm_->step(currentTime_);
-
-            transfer_data();
-
-            std::for_each(std::execution::par, instances_.begin(), instances_.end(), [](auto& instance) {
-                instance->get_properties().apply_sets();
-                instance->get_properties().apply_gets();
-            });
+            newT = algorithm_->step_with_connections(currentTime_, *this);
 
             lastDelta_ = newT - currentTime_;
             currentTime_ = newT;
@@ -231,6 +249,7 @@ void nova_engine::init(std::optional<double> startTime, const std::optional<std:
     if (!pimpl_->initialized_) {
 
         pimpl_->resolved_links_.clear();
+        pimpl_->incoming_links_.clear();
         for (const auto& link : pimpl_->links_) {
             auto src_inst = get_instance(link.src_instance);
             auto dst_inst = get_instance(link.dst_instance);
@@ -262,7 +281,8 @@ void nova_engine::init(std::optional<double> startTime, const std::optional<std:
                 rlink.src_vector = src_props.get_vector_property(link.src_variable);
                 rlink.dst_vector = dst_props.get_vector_property(link.dst_variable);
             }
-            pimpl_->resolved_links_.push_back(rlink);
+            pimpl_->incoming_links_[dst_inst].push_back(pimpl_->resolved_links_.size());
+            pimpl_->resolved_links_.push_back(std::move(rlink));
         }
 
         pimpl_->initialized_ = true;
@@ -312,6 +332,7 @@ void nova_engine::init(std::optional<double> startTime, const std::optional<std:
             instance->get_properties().apply_gets();
         }
 
+        pimpl_->currentTime_ = startTime.value_or(0);
         for (auto l = pimpl_->listeners_; const auto& listener : pimpl_->listeners_ | std::views::values) {
             listener->post_init(*this);
         }
@@ -370,9 +391,12 @@ void nova_engine::reset()
         instance->reset();
     }
     pimpl_->scenario_.reset();
+    pimpl_->algorithm_->reset();
     pimpl_->currentTime_ = 0;
+    pimpl_->lastDelta_ = 0;
     pimpl_->num_iterations_ = 0;
     pimpl_->initialized_ = false;
+    pimpl_->terminated_ = false;
 }
 
 void nova_engine::add_listener(const std::string& name, std::shared_ptr<engine_observer> listener)
@@ -411,7 +435,12 @@ void nova_engine::add_slave(std::unique_ptr<model_instance> instance)
     }
 
     pimpl_->instances_.emplace_back(std::move(instance));
-    pimpl_->algorithm_->model_instance_added(pimpl_->instances_.back().get());
+    try {
+        pimpl_->algorithm_->model_instance_added(pimpl_->instances_.back().get());
+    } catch (...) {
+        pimpl_->instances_.pop_back();
+        throw;
+    }
 }
 
 void nova_engine::add_link(const NovaDataLink& link)
