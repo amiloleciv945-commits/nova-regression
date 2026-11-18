@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nova:ChartConfig xmlns:nova="http://github.com/Nova-platform/libnova/resources/schema/ChartConfig">
+
+    <nova:chart>
+        <nova:xyseries title="dp-ship" xLabel="Position [north]" yLabel="Position [east]">
+            <nova:series name="actual">
+                <nova:x component="Ship" variable="q[1]"/>
+                <nova:y component="Ship" variable="q[2]"/>
+            </nova:series>
+            <nova:series name="ref" marker="x">
+                <nova:x component="Reference Generator" variable="x_wp"/>
+                <nova:y component="Reference Generator" variable="y_wp"/>
+            </nova:series>
+
+        </nova:xyseries>
+    </nova:chart>
+
+</nova:ChartConfig>

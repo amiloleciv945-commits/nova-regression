@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nova:ChartConfig xmlns:nova="http://github.com/Nova-platform/libnova/resources/schema/ChartConfig">
+
+    <nova:chart>
+        <nova:timeseries title="Mass-spring-damper" label="Height[m]">
+            <nova:series>
+                <nova:component name="mass">
+                    <nova:variable name="out_l_u"/>
+                </nova:component>
+            </nova:series>
+        </nova:timeseries>
+    </nova:chart>
+
+</nova:ChartConfig>

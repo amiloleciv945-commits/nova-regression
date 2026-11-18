@@ -1,0 +1,56 @@
+# CMake and native build output
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+Makefile
+*.o
+*.obj
+*.a
+*.lib
+*.pdb
+
+# Python build and cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+
+# Generated project output
+results/
+deploy/
+*.log
+
+# Local environments and settings
+.venv/
+venv/
+.env
+.env.*
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Project-specific generated files
+Inject/
+
+# Local regression model inputs
+/data/regression/
+# Retired runtime backups
+*.bak
+nova_sim_py/binaries/*.old
+nova_sim_py/binaries/*_old*.dll

@@ -1,0 +1,20 @@
+{
+  "id": "case2",
+  "name": "标准案例2：电感直接与逆模型耦合",
+  "source": "测试案例库(1)/标准测试案例/case2；连接关系见案例说明.tex 第二节",
+  "settings_source": "两个 FMU 的 DefaultExperiment：起始0秒、终止1秒、步长0.002秒",
+  "step_size": 0.002,
+  "steps": 500,
+  "timeout_seconds": 60,
+  "models": {
+    "fmu1": "data/regression/case2/base_example_case2_fmu1.fmu",
+    "fmu2": "data/regression/case2/base_example_case2_fmu2.fmu"
+  },
+  "connections": [
+    ["fmu1::di", "fmu2::di"],
+    ["fmu1::i", "fmu2::i"],
+    ["fmu2::v", "fmu1::v"]
+  ],
+  "outputs": ["fmu1::di", "fmu1::i", "fmu2::v"],
+  "reference": null
+}

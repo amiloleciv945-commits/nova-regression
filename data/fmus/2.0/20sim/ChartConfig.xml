@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nova:ChartConfig xmlns:nova="http://github.com/Nova-platform/libnova/resources/schema/ChartConfig">
+
+    <nova:chart>
+        <nova:timeseries title="ControlledTemperature" label="Temperature">
+            <nova:series>
+                <nova:component name="slave">
+                    <nova:variable name="Temperature_Room"/>
+                    <nova:variable name="Temperature_Reference"/>
+                </nova:component>
+            </nova:series>
+        </nova:timeseries>
+    </nova:chart>
+
+</nova:ChartConfig>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nova:CsvConfig decimationFactor="25" xmlns:nova="http://github.com/Nova-platform/libnova/resources/schema/CsvConfig">
+
+    <nova:components>
+        <nova:component name="Reference Generator">
+            <nova:variable name="x_ref"/>
+            <nova:variable name="y_ref"/>
+            <nova:variable name="x_wp"/>
+            <nova:variable name="y_wp"/>
+        </nova:component>
+        <nova:component name="Ship">
+            <nova:variable name="q[1]"/>
+            <nova:variable name="q[2]"/>
+        </nova:component>
+    </nova:components>
+
+</nova:CsvConfig>

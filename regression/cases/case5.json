@@ -1,0 +1,45 @@
+{
+  "id": "case5",
+  "name": "标准案例5：液压执行器与机械负载耦合",
+  "source": "base_example(1)/base_example/case5；连接按随包Model1.mo核对，FMU哈希与原案例库相同；参考CSV来自同一包",
+  "settings_source": "依据案例负责人转发的2026年3月28日记录：case1、case3步长0.002秒，case5步长0.0001秒，均运行1秒。随包CSV采样更密，仅比较本次同时间点，不平移。",
+  "step_size": 0.0001,
+  "steps": 10000,
+  "timeout_seconds": 60,
+  "models": {
+    "HydraulicActuator": "data/regression/case5_bundle_20261113/co_simulation_example_Hydraulic_HydraulicActuator.fmu",
+    "mass_spring": "data/regression/case5_bundle_20261113/co_simulation_example_Hydraulic_mass_spring.fmu"
+  },
+  "connections": [
+    [
+      "HydraulicActuator::F",
+      "mass_spring::F_input"
+    ],
+    [
+      "mass_spring::V",
+      "HydraulicActuator::V_input"
+    ]
+  ],
+  "outputs": [
+    "HydraulicActuator::F",
+    "mass_spring::V",
+    "mass_spring::F_input"
+  ],
+  "reference": {
+    "file": "data/regression/case5_bundle_20261113/case5.csv",
+    "sha256": "aae30c09dfe0dcef1e29742195efe5bae4c55c0dc9838b7260c10b4552a34230",
+    "source": "案例负责人提供的base_example(1)/base_example/case5/case5.csv；按原列的实例及变量比较，未另行生成基准",
+    "time_column": "Time(s)",
+    "time_alignment": "actual_times",
+    "variables": [
+      "mass_spring::V",
+      "mass_spring::F_input"
+    ],
+    "columns": {
+      "mass_spring::V": "fMU_co_simulation_example_Hydraulic_mass_spring.V(m/s)",
+      "mass_spring::F_input": "fMU_co_simulation_example_Hydraulic_mass_spring.F_input(N)"
+    },
+    "atol": null,
+    "rtol": null
+  }
+}

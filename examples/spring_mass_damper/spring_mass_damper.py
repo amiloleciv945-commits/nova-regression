@@ -1,0 +1,60 @@
+from nova_sim_py import *
+from nova_sim_py.chart_plotter import *
+
+from pathlib import Path
+
+def main():
+
+    NovaLib.set_log_level("debug")
+
+    fmu_folder = (Path(__file__).parent.parent.parent / 'data' / 'fmus' / '1.0' / 'mass_spring_damper').resolve()
+    result_file = f"results/python/spring_mass_damper.csv"
+
+    with NovaSimulationStructure() as ss:
+        if True:
+            ss.add_model("damper", f"{fmu_folder}/Damper.fmu")
+            ss.add_model("mass", f"{fmu_folder}/Mass.fmu")
+            ss.add_model("spring", f"{fmu_folder}/Spring.fmu")
+        else:
+            ss.add_model("damper", f"proxyfmu://localhost?file={fmu_folder}/Damper.fmu")
+            ss.add_model("mass", f"proxyfmu://localhost?file={fmu_folder}/Mass.fmu")
+            ss.add_model("spring", f"proxyfmu://localhost?file={fmu_folder}/Spring.fmu")
+
+        ss.make_real_connection("spring::for_xx", "mass::in_l_u")
+        ss.make_real_connection("spring::for_yx", "mass::in_l_w")
+        ss.make_real_connection("mass::out_l_u", "spring::dis_xx")
+        ss.make_real_connection("mass::out_l_w", "spring::dis_yx")
+        ss.make_real_connection("damper::df_0", "mass::in_f_u")
+        ss.make_real_connection("damper::df_1", "mass::in_f_w")
+        ss.make_real_connection("mass::out_f_u", "damper::lv_0")
+        ss.make_real_connection("mass::out_f_w", "damper::lv_1")
+
+        params = {
+            "spring::springStiffness" : 5.,
+            "spring::zeroForceLength": 5.,
+            "damper::dampingCoefficient": 2.,
+            "mass::initialPositionX": 6.,
+            "mass::mediumDensity": 1.
+        }
+
+        ss.add_parameter_set("initialValues", params)
+
+        with(NovaEngine(structure=ss, step_size=1.0/100) as sim):
+
+            sim.add_csv_writer(result_file)
+
+            sim.init(parameter_set="initialValues")
+
+            sim.step_until(80)
+            sim.terminate()
+
+    config = TimeSeriesConfig(
+        title="Mass-spring-damper",
+        y_label="Height[m]",
+        identifiers=["mass::out_l_u"])
+    chart_plotter = Plotter(result_file, config)
+    chart_plotter.show()
+
+
+if __name__ == "__main__":
+    main()

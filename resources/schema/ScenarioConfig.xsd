@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:nova="http://github.com/Nova-platform/libnova/resources/schema/ScenarioConfig"
+           elementFormDefault="qualified"
+           targetNamespace="http://github.com/Nova-platform/libnova/resources/schema/ScenarioConfig">
+
+    <xs:element name="Scenario" type="nova:TAssignments"/>
+
+    <xs:complexType name="TAssignments">
+        <xs:sequence>
+            <xs:element name="action" type="nova:TVariable" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TVariable">
+        <xs:sequence>
+            <xs:element name="variable" type="nova:TAssign" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="t" type="xs:float" use="required"/>
+        <xs:attribute name="eps" type="xs:float"/>
+    </xs:complexType>
+
+    <xs:complexType name="TReal">
+        <xs:attribute name="value" type="xs:float" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="TInteger">
+        <xs:attribute name="value" type="xs:int" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="TBoolean">
+        <xs:attribute name="value" type="xs:boolean" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="TString">
+        <xs:attribute name="value" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="TAssign">
+        <xs:sequence>
+            <xs:choice>
+                <xs:element name="real" type="nova:TReal"/>
+                <xs:element name="integer" type="nova:TInteger"/>
+                <xs:element name="boolean" type="nova:TBoolean"/>
+                <xs:element name="string" type="nova:TString"/>
+            </xs:choice>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:string" use="required"/>
+    </xs:complexType>
+
+</xs:schema>

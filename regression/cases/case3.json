@@ -1,0 +1,32 @@
+{
+  "id": "case3",
+  "name": "标准案例3：旋转惯性耦合（2026年11月12日收到的修订模型）",
+  "source": "base_example(1)/base_example/case3；2026年11月12日由案例负责人补发，连接关系按该包Model1.mo及FMU接口核对",
+  "settings_source": "两个修订FMU的DefaultExperiment及报告4.2.2：起始0秒、终止1秒、步长0.002秒。每次自动与随包case3.csv比较角速度、扭矩的501个时间点；允许误差待约定。",
+  "step_size": 0.002,
+  "steps": 500,
+  "timeout_seconds": 60,
+  "models": {
+    "fmu1": "data/regression/case3_revised_20261112/base_example_case3_fmu1.fmu",
+    "fmu2": "data/regression/case3_revised_20261112/base_example_case3_fmu2.fmu"
+  },
+  "connections": [
+    ["fmu1::w", "fmu2::w"],
+    ["fmu2::tau", "fmu1::tau"]
+  ],
+  "outputs": ["fmu1::w", "fmu1::tau", "fmu2::tau", "fmu2::w"],
+  "reference": {
+    "file": "data/regression/case3_revised_20261112/case3.csv",
+    "sha256": "50b903c058ba059b39f784cb37be10d5515e4330b7220287f141fae93fc54846",
+    "source": "2026年11月12日案例负责人补发的base_example(1)/base_example/case3/case3.csv；生成软件及正式验收用途待确认",
+    "time_column": "Time(s)",
+    "time_alignment": "actual_times",
+    "variables": ["fmu1::w", "fmu1::tau"],
+    "columns": {
+      "fmu1::w": "fMU_base_example_case3_fmu1_1.w(rad/s)",
+      "fmu1::tau": "fMU_base_example_case3_fmu1_1.tau(N.m)"
+    },
+    "atol": null,
+    "rtol": null
+  }
+}

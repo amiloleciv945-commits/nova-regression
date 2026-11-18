@@ -1,0 +1,7 @@
+include version.txt
+include README.md
+include LICENSE
+
+recursive-include nova_sim_py/binaries *.dll
+recursive-include nova_sim_py/binaries *.so
+recursive-include nova_sim_py/binaries *.dylib
