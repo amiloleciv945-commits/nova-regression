@@ -2,6 +2,7 @@
 
 add_test_executable(test_variable_identifier)
 add_test_executable(test_connection)
+add_test_executable(test_gauss_seidel)
 add_test_executable(test_property)
 add_test_executable(test_runner)
 add_test_executable(test_ssp_parser)
