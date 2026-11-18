@@ -128,7 +128,7 @@ bool fmi1_slave::step(double current_time, double step_size)
 {
     auto doStep = ctx_->get_dll()->get_function<fmiDoStep_t>(md_.modelIdentifier + "_fmiDoStep");
     const auto status = doStep(reinterpret_cast<fmi1Component*>(instance_.get()), current_time, step_size, fmi1True);
-    return status == fmi1OK;
+    return status == fmi1OK || status == fmi1Warning;
 }
 
 bool fmi1_slave::terminate()

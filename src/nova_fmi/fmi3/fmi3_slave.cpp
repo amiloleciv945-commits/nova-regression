@@ -142,7 +142,7 @@ bool fmi3_slave::step(double current_time, double step_size)
         &terminateSimulation_fmi,
         &earlyReturn_fmi,
         &lastTime);
-    return status == fmi3OK;
+    return (status == fmi3OK || status == fmi3Warning) && !earlyReturn_fmi && !terminateSimulation_fmi;
 }
 
 bool fmi3_slave::terminate()
