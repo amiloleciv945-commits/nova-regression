@@ -15,7 +15,6 @@ set(publicHeaders
 
     "nova/components/algorithm/algorithm.hpp"
     "nova/components/algorithm/fixed_step_algorithm.hpp"
-    "nova/components/algorithm/gauss_seidel_algorithm.hpp"
     "nova/components/algorithm/strong_coupling_algorithm.hpp"
 
     "nova/components/recorder/engine_observer.hpp"
@@ -70,7 +69,6 @@ set(sources
         "engine/scenario/scenario.cpp"
 
         "components/algorithm/fixed_step_algorithm.cpp"
-        "components/algorithm/gauss_seidel_algorithm.cpp"
 	"components/algorithm/strong_coupling_algorithm.cpp"
 
         "components/recorder/csv_recorder.cpp"

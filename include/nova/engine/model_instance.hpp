@@ -43,12 +43,6 @@ public:
     virtual void exit_initialization_mode() = 0;
 
     virtual void step(double currentTime, double stepSize) = 0;
-    // Return whether the model completed the entire communication step.
-    virtual bool try_step(double currentTime, double stepSize)
-    {
-        step(currentTime, stepSize);
-        return true;
-    }
 
     virtual void terminate() = 0;
 
