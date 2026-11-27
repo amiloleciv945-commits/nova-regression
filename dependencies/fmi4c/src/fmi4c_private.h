@@ -825,10 +825,6 @@ struct fmuHandle {
 };
 typedef struct fmuHandle fmuHandle;
 
-bool parseModelDescriptionFmi1(fmuHandle *fmuFile);
-bool parseModelDescriptionFmi2(fmuHandle *fmuFile);
-bool parseModelDescriptionFmi3(fmuHandle *fmuFile);
-
 bool loadFunctionsFmi1(fmuHandle *contents);
 bool loadFunctionsFmi2(fmuHandle *contents, fmi2Type fmuType);
 bool loadFunctionsFmi3(fmuHandle *contents, fmi3Type fmuType);

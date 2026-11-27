@@ -9,6 +9,7 @@
 #include "nova/components/ssp/ssp_loader.hpp"
 #include "nova/engine/engine_scheduler.hpp"
 #include <cstring>
+#include <exception>
 #include <memory>
 #include <map>
 #include <string>
@@ -35,7 +36,7 @@ struct nova_scheduler_t {
     std::unique_ptr<engine_scheduler> runner;
 };
 
-static std::string g_last_error_msg;
+static thread_local std::string g_last_error_msg;
 
 extern "C" NOVA_API nova_simulation_structure_t* nova_simulation_structure_create() {
     auto ss = new nova_simulation_structure_t();
@@ -69,9 +70,22 @@ extern "C" NOVA_API void nova_simulation_structure_destroy(nova_simulation_struc
 
 extern "C" NOVA_API bool nova_simulation_structure_add_model(nova_simulation_structure_t* ss, const char* name, const char* uri) {
     try {
+        if (!ss || !ss->ss) {
+            g_last_error_msg = "Simulation structure is null";
+            return false;
+        }
+        if (!name || !uri) {
+            g_last_error_msg = "Model name and URI are required";
+            return false;
+        }
         ss->ss->add_model(name, std::string(uri), std::nullopt);
+        g_last_error_msg.clear();
         return true;
+    } catch (const std::exception& e) {
+        g_last_error_msg = e.what();
+        return false;
     } catch (...) {
+        g_last_error_msg = "Unknown error while adding model";
         return false;
     }
 }

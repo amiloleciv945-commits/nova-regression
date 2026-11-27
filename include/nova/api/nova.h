@@ -84,6 +84,7 @@ NOVA_API void nova_engine_add_listener(nova_engine_t* sim, const char* name, voi
 NOVA_API void nova_plot_csv(const char* csv_path, const char* config_path);
 
 NOVA_API void nova_engine_reset(nova_engine_t* sim);
+// Returns the last error on the calling thread.
 NOVA_API const char* nova_last_error_msg();
 
 NOVA_API bool nova_engine_get_real(nova_engine_t* sim, const char* instance, const char* variable, double* value);

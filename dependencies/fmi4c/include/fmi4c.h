@@ -43,6 +43,8 @@ extern "C" {
 FMI4C_DLLAPI void fmi4c_setMessageFunction(void (*func)(const char*));
 FMI4C_DLLAPI fmiVersion_t fmi4c_getFmiVersion(fmuHandle *fmu);
 FMI4C_DLLAPI fmuHandle *fmi4c_loadUnzippedFmu(const char *instanceName, const char *unzipLocation);
+// On failure, error receives a diagnostic string with static storage duration.
+FMI4C_DLLAPI fmuHandle *fmi4c_loadUnzippedFmuWithError(const char *instanceName, const char *unzipLocation, const char **error);
 FMI4C_DLLAPI fmuHandle* fmi4c_loadFmu(const char *fmufile, const char* instanceName);
 FMI4C_DLLAPI void fmi4c_freeFmu(fmuHandle* fmu);
 

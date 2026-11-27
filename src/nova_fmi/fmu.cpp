@@ -5,29 +5,28 @@
 #include "components/util/temp_dir.hpp"
 #include "components/util/unzipper.hpp"
 
-#include "nova/components/logger/logger.hpp"
-
 #include <fmi4c.h>
+#include <stdexcept>
+
 std::unique_ptr<nova_fmi::fmu> nova_fmi::loadFmu(const std::filesystem::path& fmuPath, bool fmiLogging)
 {
-
     if (!exists(fmuPath)) {
-        nova::log::err("No such file: {}", absolute(fmuPath).string());
-        return nullptr;
+        throw std::runtime_error("No such FMU file: " + absolute(fmuPath).string());
     }
 
-    const std::string fmuName = std::filesystem::path(fmuPath).stem().string();
+    const std::string fmuFile = fmuPath.string();
+    const std::string fmuName = fmuPath.stem().string();
     auto temp = std::make_unique<nova::temp_dir>(fmuName);
 
     if (!nova::unzip(fmuPath, temp->path())) {
-        nova::log::err("Failed to unzip '{}' to tempdir '{}'!", fmuPath.string(), temp->path().string());
-        return nullptr;
+        throw std::runtime_error("Failed to unzip FMU '" + fmuFile + "'");
     }
 
-    auto fmuCtx = fmi4c_loadUnzippedFmu(fmuPath.string().c_str(), temp->path().string().c_str());
+    const char* loadError = nullptr;
+    std::unique_ptr<fmuHandle, decltype(&fmi4c_freeFmu)> fmuCtx(
+        fmi4c_loadUnzippedFmuWithError(fmuFile.c_str(), temp->path().string().c_str(), &loadError), fmi4c_freeFmu);
     if (!fmuCtx) {
-        nova::log::err("Failed to load '{}'!", fmuPath.string());
-        return nullptr;
+        throw std::runtime_error("FMU '" + fmuFile + "': " + loadError);
     }
 
     std::filesystem::path binDirOld, binDirFmi3, binDir;
@@ -49,42 +48,40 @@ std::unique_ptr<nova_fmi::fmu> nova_fmi::loadFmu(const std::filesystem::path& fm
     }
 
     const char* modelIdentifier = nullptr;
-    switch (fmi4c_getFmiVersion(fmuCtx)) {
+    const auto version = fmi4c_getFmiVersion(fmuCtx.get());
+    switch (version) {
         case fmiVersion1:
-            modelIdentifier = fmi1_getModelIdentifier(fmuCtx);
+            modelIdentifier = fmi1_getModelIdentifier(fmuCtx.get());
             break;
         case fmiVersion2:
-            modelIdentifier = fmi2cs_getModelIdentifier(fmuCtx);
+            modelIdentifier = fmi2cs_getModelIdentifier(fmuCtx.get());
             break;
         case fmiVersion3:
-            modelIdentifier = fmi3cs_getModelIdentifier(fmuCtx);
+            modelIdentifier = fmi3cs_getModelIdentifier(fmuCtx.get());
             break;
         default:
-            break;
+            throw std::runtime_error("Unsupported FMI version in FMU '" + fmuFile + "'");
     }
 
-    std::filesystem::path dllPath;
-    if (modelIdentifier && modelIdentifier[0] != '\0') {
+    if (!modelIdentifier || modelIdentifier[0] == '\0') {
+        throw std::runtime_error("Missing co-simulation model identifier in FMU '" + fmuFile + "'");
+    }
 #ifdef _WIN32
-        dllPath = binDir / (std::string(modelIdentifier) + ".dll");
+    const auto dllPath = binDir / (std::string(modelIdentifier) + ".dll");
 #else
-        dllPath = binDir / (std::string(modelIdentifier) + ".so");
+    const auto dllPath = binDir / (std::string(modelIdentifier) + ".so");
 #endif
-    }
 
-    if (dllPath.empty() || !std::filesystem::is_regular_file(dllPath)) {
-        nova::log::err(
-            "Failed to find FMU model library '{}' in {}!",
-            modelIdentifier ? modelIdentifier : "",
-            binDir.string());
-        fmi4c_freeFmu(fmuCtx);
-        return nullptr;
+    if (!std::filesystem::is_regular_file(dllPath)) {
+        const auto library = dllPath.lexically_relative(temp->path());
+        throw std::runtime_error("FMU '" + fmuFile + "' is missing the model library '" + library.generic_string() + "'");
     }
 
     auto loader = std::make_shared<nova_fmi::dll_loader>(dllPath.string());
-    auto handle = std::make_unique<fmicontext>(fmuCtx, std::move(temp), loader);
+    auto handle = std::make_unique<fmicontext>(fmuCtx.get(), std::move(temp), std::move(loader));
+    fmuCtx.release();
 
-    switch (fmi4c_getFmiVersion(handle->get())) {
+    switch (version) {
         case fmiVersion1:
             return std::make_unique<fmi1_fmu>(std::move(handle), fmiLogging);
         case fmiVersion2:
@@ -92,6 +89,6 @@ std::unique_ptr<nova_fmi::fmu> nova_fmi::loadFmu(const std::filesystem::path& fm
         case fmiVersion3:
             return std::make_unique<fmi3_fmu>(std::move(handle), fmiLogging);
         default:
-            return nullptr;
+            throw std::runtime_error("Unsupported FMI version in FMU '" + fmuFile + "'");
     }
 }

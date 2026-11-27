@@ -101,7 +101,7 @@ void freeDuplicatedConstChar(const char* ptr)
 //! @brief Parses modelDescription.xml for FMI 1
 //! @param fmu FMU handle
 //! @returns True if parsing was successful
-bool parseModelDescriptionFmi1(fmuHandle* fmu)
+static bool parseModelDescriptionFmi1(fmuHandle* fmu, ezxml_t rootElement)
 {
     fmu->fmi1.modelName = NULL;
     fmu->fmi1.modelIdentifier = NULL;
@@ -130,20 +130,6 @@ bool parseModelDescriptionFmi1(fmuHandle* fmu)
     fmu->fmi1.hasBooleanVariables = false;
 
     fmu->fmi1.type = fmi1ModelExchange;
-
-    char cwd[FILENAME_MAX];
-#ifdef _WIN32
-    _getcwd(cwd, sizeof(char) * FILENAME_MAX);
-#else
-    getcwd(cwd, sizeof(char) * FILENAME_MAX);
-#endif
-    chdir(fmu->unzippedLocation);
-
-    ezxml_t rootElement = ezxml_parse_file("modelDescription.xml");
-    if (strcmp(rootElement->name, "fmiModelDescription")) {
-        printf("Wrong root tag name: %s\n", rootElement->name);
-        return false;
-    }
 
     // Parse attributes in <fmiModelDescription>
     parseStringAttributeEzXmlAndRememberPointer(rootElement, "modelName", &fmu->fmi1.modelName, fmu);
@@ -377,10 +363,6 @@ bool parseModelDescriptionFmi1(fmuHandle* fmu)
         }
     }
 
-    ezxml_free(rootElement);
-
-    chdir(cwd);
-
     return true;
 }
 
@@ -398,7 +380,7 @@ fmi2Initial initialDefaultTableFmi2[5][6] = {
 //! @brief Parses modelDescription.xml for FMI 2
 //! @param fmu FMU handle
 //! @returns True if parsing was successful
-bool parseModelDescriptionFmi2(fmuHandle* fmu)
+static bool parseModelDescriptionFmi2(fmuHandle* fmu, ezxml_t rootElement)
 {
     fmu->fmi2.fmiVersion_ = NULL;
     fmu->fmi2.modelName = NULL;
@@ -446,20 +428,6 @@ bool parseModelDescriptionFmi2(fmuHandle* fmu)
     fmu->fmi2.hasStringVariables = false;
     fmu->fmi2.hasBooleanVariables = false;
     fmu->fmi2.hasVectorVariables = false;
-
-    char cwd[FILENAME_MAX];
-#ifdef _WIN32
-    _getcwd(cwd, sizeof(char) * FILENAME_MAX);
-#else
-    getcwd(cwd, sizeof(char) * FILENAME_MAX);
-#endif
-    chdir(fmu->unzippedLocation);
-
-    ezxml_t rootElement = ezxml_parse_file("modelDescription.xml");
-    if (strcmp(rootElement->name, "fmiModelDescription")) {
-        printf("Wrong root tag name: %s\n", rootElement->name);
-        return false;
-    }
 
     // Parse attributes in <fmiModelDescription>
     parseStringAttributeEzXmlAndRememberPointer(rootElement, "fmiVersion", &fmu->fmi2.fmiVersion_, fmu);
@@ -889,10 +857,6 @@ bool parseModelDescriptionFmi2(fmuHandle* fmu)
         }
     }
 
-    ezxml_free(rootElement);
-
-    chdir(cwd);
-
     return true;
 }
 
@@ -908,7 +872,7 @@ fmi3Initial initialDefaultTableFmi3[5][7] = {
 //! @brief Parses modelDescription.xml for FMI 3
 //! @param fmu FMU handle
 //! @returns True if parsing was successful
-bool parseModelDescriptionFmi3(fmuHandle* fmu)
+static bool parseModelDescriptionFmi3(fmuHandle* fmu, ezxml_t rootElement)
 {
     fmu->fmi3.modelName = NULL;
     fmu->fmi3.instantiationToken = NULL;
@@ -985,20 +949,6 @@ bool parseModelDescriptionFmi3(fmuHandle* fmu)
     fmu->fmi3.hasBinaryVariables = false;
     fmu->fmi3.hasClockVariables = false;
     fmu->fmi3.hasStructuralParameters = false;
-
-    char cwd[FILENAME_MAX];
-#ifdef _WIN32
-    _getcwd(cwd, sizeof(char) * FILENAME_MAX);
-#else
-    getcwd(cwd, sizeof(char) * FILENAME_MAX);
-#endif
-    chdir(fmu->unzippedLocation);
-
-    ezxml_t rootElement = ezxml_parse_file("modelDescription.xml");
-    if (strcmp(rootElement->name, "fmiModelDescription")) {
-        printf("Wrong root tag name: %s\n", rootElement->name);
-        return false;
-    }
 
     parseStringAttributeEzXmlAndRememberPointer(rootElement, "modelName", &fmu->fmi3.modelName, fmu);
     parseStringAttributeEzXmlAndRememberPointer(rootElement, "instantiationToken", &fmu->fmi3.instantiationToken, fmu);
@@ -1915,10 +1865,6 @@ bool parseModelDescriptionFmi3(fmuHandle* fmu)
             ++i;
         }
     }
-
-    ezxml_free(rootElement);
-
-    chdir(cwd);
 
     return true;
 }
@@ -4589,9 +4535,30 @@ bool unzipFmu(const char* fmufile, const char* instanceName, const char* unzipLo
     return true;
 }
 
-fmuHandle* fmi4c_loadUnzippedFmu_internal(const char* instanceName, const char* unzipLocation, bool unzippedLocationIsTemporary)
+static fmuHandle* failToLoadFmu(fmuHandle* fmu, ezxml_t description, const char** error, const char* reason)
 {
+    if (error) {
+        *error = reason;
+    } else {
+        printf("%s\n", reason);
+    }
+    ezxml_free(description);
+    if (fmu) {
+        fmi4c_freeFmu(fmu);
+    }
+    return NULL;
+}
+
+static fmuHandle* fmi4c_loadUnzippedFmu_internal(
+    const char* instanceName, const char* unzipLocation, bool unzippedLocationIsTemporary, const char** error)
+{
+    if (error) {
+        *error = NULL;
+    }
     fmuHandle* fmu = calloc(1, sizeof(fmuHandle)); // Using calloc to ensure all member pointers (and data) are initialized to NULL (0)
+    if (!fmu) {
+        return failToLoadFmu(NULL, NULL, error, "Failed to allocate FMU context");
+    }
     fmu->dll = NULL;
     fmu->numAllocatedPointers = 0;
     fmu->allocatedPointers = NULL;
@@ -4603,25 +4570,20 @@ fmuHandle* fmi4c_loadUnzippedFmu_internal(const char* instanceName, const char* 
     } else
         fmu->unzippedLocation = duplicateAndRememberString(fmu, unzipLocation);
 
-    char cwd[FILENAME_MAX];
-#ifdef _WIN32
-    _getcwd(cwd, sizeof(char) * FILENAME_MAX);
-#else
-    getcwd(cwd, sizeof(char) * FILENAME_MAX);
-#endif
-    chdir(fmu->unzippedLocation);
-    ezxml_t rootElement = ezxml_parse_file("modelDescription.xml");
+    const size_t descriptionPathSize = strlen(unzipLocation) + sizeof("/modelDescription.xml");
+    char* descriptionPath = malloc(descriptionPathSize);
+    if (descriptionPath == NULL) {
+        return failToLoadFmu(fmu, NULL, error, "Failed to allocate path to modelDescription.xml");
+    }
+    snprintf(descriptionPath, descriptionPathSize, "%s/modelDescription.xml", unzipLocation);
+    ezxml_t rootElement = ezxml_parse_file(descriptionPath);
+    free(descriptionPath);
     if (rootElement == NULL) {
-        printf("Failed to read modelDescription.xml in %s\n", fmu->unzippedLocation);
-        fmi4c_freeFmu(fmu);
-        return NULL;
+        return failToLoadFmu(fmu, NULL, error, "Failed to read modelDescription.xml");
     }
-    if (strcmp(rootElement->name, "fmiModelDescription")) {
-        printf("Wrong root tag name: %s\n", rootElement->name);
-        fmi4c_freeFmu(fmu);
-        return NULL;
+    if (*ezxml_error(rootElement) || rootElement->name == NULL || strcmp(rootElement->name, "fmiModelDescription")) {
+        return failToLoadFmu(fmu, rootElement, error, "Invalid modelDescription.xml");
     }
-    chdir(cwd);
 
     // Figure out FMI version
     const char* version = NULL;
@@ -4633,16 +4595,12 @@ fmuHandle* fmi4c_loadUnzippedFmu_internal(const char* instanceName, const char* 
         } else if (version[0] == '3') {
             fmu->version = fmiVersion3;
         } else {
-            printf("Unsupported FMI version: %s\n", version);
             freeDuplicatedConstChar(version);
-            free(fmu);
-            return NULL;
+            return failToLoadFmu(fmu, rootElement, error, "Unsupported FMI version in modelDescription.xml");
         }
         freeDuplicatedConstChar(version);
     } else {
-        printf("FMI version not specified.");
-        free(fmu);
-        return NULL;
+        return failToLoadFmu(fmu, rootElement, error, "Missing FMI version in modelDescription.xml");
     }
 
     if (fmu->version == fmiVersion1) {
@@ -4660,8 +4618,6 @@ fmuHandle* fmi4c_loadUnzippedFmu_internal(const char* instanceName, const char* 
         strncat(resourcesLocation, "/resources/", FILENAME_MAX - strlen(unzipLocation) - 1);
         fmu->resourcesLocation = duplicateAndRememberString(fmu, resourcesLocation);
     }
-
-    ezxml_free(rootElement);
 
     fmu->fmi1.getVersion = placeholder_fmiGetVersion;
     fmu->fmi1.getTypesPlatform = placeholder_fmiGetTypesPlatform;
@@ -4831,35 +4787,32 @@ fmuHandle* fmi4c_loadUnzippedFmu_internal(const char* instanceName, const char* 
         fmu->fmi1.variables = mallocAndRememberPointer(fmu, 100 * sizeof(fmi1VariableHandle));
         fmu->fmi1.variablesSize = 100;
         fmu->fmi1.numberOfVariables = 0;
-        if (!parseModelDescriptionFmi1(fmu)) {
-            printf("Failed to parse modelDescription.xml\n");
-            free(fmu);
-            return NULL;
+        if (!parseModelDescriptionFmi1(fmu, rootElement)) {
+            return failToLoadFmu(fmu, rootElement, error, "Failed to parse FMI 1 modelDescription.xml");
+        }
+        if (!fmu->fmi1.modelIdentifier || !*fmu->fmi1.modelIdentifier) {
+            return failToLoadFmu(fmu, rootElement, error, "Missing FMI 1 model identifier in modelDescription.xml");
         }
         if (!loadFunctionsFmi1(fmu)) {
-            free(fmu);
-            return NULL; // Error message should already have been printed
+            return failToLoadFmu(fmu, rootElement, error, "Failed to load FMI 1 model library or its required functions");
         }
     } else if (fmu->version == fmiVersion2) {
         fmu->fmi2.variables = mallocAndRememberPointer(fmu, 100 * sizeof(fmi2VariableHandle));
         fmu->fmi2.variablesSize = 100;
         fmu->fmi2.numberOfVariables = 0;
-        if (!parseModelDescriptionFmi2(fmu)) {
-            printf("Failed to parse modelDescription.xml\n");
-            free(fmu);
-            return NULL;
+        if (!parseModelDescriptionFmi2(fmu, rootElement)) {
+            return failToLoadFmu(fmu, rootElement, error, "Failed to parse FMI 2 modelDescription.xml");
         }
     } else if (fmu->version == fmiVersion3) {
         fmu->fmi3.variables = mallocAndRememberPointer(fmu, 100 * sizeof(fmi3VariableHandle));
         fmu->fmi3.variablesSize = 100;
         fmu->fmi3.numberOfVariables = 0;
-        if (!parseModelDescriptionFmi3(fmu)) {
-            printf("Failed to parse modelDescription.xml\n");
-            free(fmu);
-            return NULL;
+        if (!parseModelDescriptionFmi3(fmu, rootElement)) {
+            return failToLoadFmu(fmu, rootElement, error, "Failed to parse FMI 3 modelDescription.xml");
         }
     }
 
+    ezxml_free(rootElement);
     fmu->unzippedLocationIsTemporary = false;
 
     return fmu;
@@ -4871,7 +4824,12 @@ fmuHandle* fmi4c_loadUnzippedFmu_internal(const char* instanceName, const char* 
 //! @returns Handle to FMU
 fmuHandle* fmi4c_loadUnzippedFmu(const char* instanceName, const char* unzipLocation)
 {
-    return fmi4c_loadUnzippedFmu_internal(instanceName, unzipLocation, false);
+    return fmi4c_loadUnzippedFmu_internal(instanceName, unzipLocation, false, NULL);
+}
+
+fmuHandle* fmi4c_loadUnzippedFmuWithError(const char* instanceName, const char* unzipLocation, const char** error)
+{
+    return fmi4c_loadUnzippedFmu_internal(instanceName, unzipLocation, false, error);
 }
 
 //! @brief Loads the specified FMU file
@@ -4886,8 +4844,10 @@ fmuHandle* fmi4c_loadFmu(const char* fmufile, const char* instanceName)
         return NULL;
     }
 
-    fmuHandle* fmu = fmi4c_loadUnzippedFmu_internal(instanceName, unzipLocation, true);
-    fmu->unzippedLocationIsTemporary = true;
+    fmuHandle* fmu = fmi4c_loadUnzippedFmu_internal(instanceName, unzipLocation, true, NULL);
+    if (fmu) {
+        fmu->unzippedLocationIsTemporary = true;
+    }
     return fmu;
 }
 
