@@ -69,6 +69,7 @@ set(sources
         "engine/scenario/scenario.cpp"
 
         "components/algorithm/fixed_step_algorithm.cpp"
+        "components/algorithm/gauss_seidel_algorithm.cpp"
 	"components/algorithm/strong_coupling_algorithm.cpp"
 
         "components/recorder/csv_recorder.cpp"
