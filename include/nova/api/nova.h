@@ -2,6 +2,7 @@
 #define NOVA_H
 
 #include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,9 +49,30 @@ NOVA_API void nova_simulation_structure_add_parameter_set(nova_simulation_struct
 
 NOVA_API nova_engine_t* nova_engine_create(nova_simulation_structure_t* ss, double step_size);
 NOVA_API nova_engine_t* nova_engine_create_from_ssp(const char* ssp_path, double step_size);
+
+typedef enum nova_algorithm_type_t {
+    NOVA_ALGORITHM_FIXED_STEP = 0,
+    NOVA_ALGORITHM_GAUSS_SEIDEL = 1,
+    NOVA_ALGORITHM_STRONG_COUPLING = 2
+} nova_algorithm_type_t;
+
+typedef struct nova_algorithm_config_t {
+    nova_algorithm_type_t type;
+    bool parallel;
+    const char* const* order;
+    size_t order_size;
+    size_t max_iterations;
+    int output_holder_type;
+    int input_holder_type;
+} nova_algorithm_config_t;
+
+/* The config is read during creation. A null config selects parallel fixed step. */
+NOVA_API nova_engine_t* nova_engine_create_with_algorithm(nova_simulation_structure_t* ss, double step_size, const nova_algorithm_config_t* config);
+NOVA_API nova_engine_t* nova_engine_create_from_ssp_with_algorithm(const char* ssp_path, double step_size, const nova_algorithm_config_t* config);
 NOVA_API void nova_engine_destroy(nova_engine_t* sim);
 NOVA_API bool nova_engine_load_scenario(nova_engine_t* sim, const char* scenario_file);
 NOVA_API bool nova_engine_init(nova_engine_t* sim, double start_time, const char* parameter_set);
+/* Failed steps set nova_last_error_msg(). nova_engine_step also returns NaN. */
 NOVA_API double nova_engine_step(nova_engine_t* sim, unsigned int num_steps);
 NOVA_API void nova_engine_step_until(nova_engine_t* sim, double time_point);
 NOVA_API void nova_engine_step_for(nova_engine_t* sim, double duration);

@@ -2,17 +2,23 @@
 #include "nova/api/nova.h"
 #include "nova/components/structure/simulation_structure.hpp"
 #include "nova/components/algorithm/fixed_step_algorithm.hpp"
+#include "nova/components/algorithm/gauss_seidel_algorithm.hpp"
+#include "nova/components/algorithm/strong_coupling_algorithm.hpp"
 #include "nova/components/recorder/csv_recorder.hpp"
 #include "nova/components/logger/logger.hpp"
 #include "nova/api/lib_info.hpp"
 #include "nova/components/util/chart_plotter.hpp"
 #include "nova/components/ssp/ssp_loader.hpp"
 #include "nova/engine/engine_scheduler.hpp"
+#include <cmath>
 #include <cstring>
 #include <exception>
+#include <limits>
 #include <memory>
 #include <map>
+#include <stdexcept>
 #include <string>
+#include <vector>
 
 using namespace nova;
 
@@ -157,17 +163,62 @@ extern "C" NOVA_API void nova_simulation_structure_add_parameter_set(nova_simula
     ss->ss->add_parameter_set(std::string(name), pps->params);
 }
 
+static std::unique_ptr<algorithm> make_algorithm(double step_size, const nova_algorithm_config_t* config) {
+    if (!config) {
+        return std::make_unique<fixed_step_algorithm>(step_size);
+    }
+    if (!std::isfinite(step_size) || step_size <= 0.0) {
+        throw std::invalid_argument("Step size must be finite and positive");
+    }
+
+    switch (config->type) {
+    case NOVA_ALGORITHM_FIXED_STEP:
+        return std::make_unique<fixed_step_algorithm>(step_size, config->parallel);
+    case NOVA_ALGORITHM_GAUSS_SEIDEL: {
+        if (!config->order || config->order_size == 0) {
+            throw std::invalid_argument("Gauss-Seidel requires an instance order");
+        }
+        std::vector<std::string> order;
+        order.reserve(config->order_size);
+        for (std::size_t i = 0; i < config->order_size; ++i) {
+            if (!config->order[i]) {
+                throw std::invalid_argument("Gauss-Seidel instance names must not be null");
+            }
+            order.emplace_back(config->order[i]);
+        }
+        return std::make_unique<gauss_seidel_algorithm>(step_size, std::move(order));
+    }
+    case NOVA_ALGORITHM_STRONG_COUPLING:
+        if (config->output_holder_type < 0 || config->output_holder_type > 3
+            || config->input_holder_type < 0 || config->input_holder_type > 3) {
+            throw std::invalid_argument("Strong coupling holder types must be between 0 and 3");
+        }
+        return std::make_unique<strong_coupling_algorithm>(step_size, config->max_iterations,
+            config->parallel, config->output_holder_type, config->input_holder_type);
+    default:
+        throw std::invalid_argument("Unknown Nova algorithm type");
+    }
+}
+
 extern "C" NOVA_API nova_engine_t* nova_engine_create(nova_simulation_structure_t* ss, double step_size) {
+    return nova_engine_create_with_algorithm(ss, step_size, nullptr);
+}
+
+extern "C" NOVA_API nova_engine_t* nova_engine_create_with_algorithm(
+    nova_simulation_structure_t* ss, double step_size, const nova_algorithm_config_t* config) {
     try {
         if (!ss || !ss->ss) {
-            log::err("Failed to create engine: simulation structure is null");
-            g_last_error_msg = "simulation structure is null";
-            return nullptr;
+            throw std::invalid_argument("Simulation structure is null");
         }
-        auto algo = std::make_unique<fixed_step_algorithm>(step_size);
-        auto sim = new nova_engine_t();
-        sim->sim = ss->ss->load(std::move(algo));
-        return sim;
+        auto selected = make_algorithm(step_size, config);
+        auto* gauss_seidel = dynamic_cast<gauss_seidel_algorithm*>(selected.get());
+        auto sim = ss->ss->load(std::move(selected));
+        if (gauss_seidel) {
+            gauss_seidel->validate_model_order();
+        }
+        auto* handle = new nova_engine_t{std::move(sim)};
+        g_last_error_msg.clear();
+        return handle;
     } catch (const std::exception& e) {
         log::err("Exception during nova_engine_create: {}", e.what());
         g_last_error_msg = e.what();
@@ -180,21 +231,17 @@ extern "C" NOVA_API nova_engine_t* nova_engine_create(nova_simulation_structure_
 }
 
 extern "C" NOVA_API nova_engine_t* nova_engine_create_from_ssp(const char* ssp_path, double step_size) {
-    try {
-        auto ss = nova_simulation_structure_load_ssp(ssp_path);
-        if (!ss) return nullptr;
-        auto sim = nova_engine_create(ss, step_size);
-        nova_simulation_structure_destroy(ss);
-        return sim;
-    } catch (const std::exception& e) {
-        log::err("Exception during nova_engine_create_from_ssp: {}", e.what());
-        g_last_error_msg = e.what();
-        return nullptr;
-    } catch (...) {
-        log::err("Unknown exception during nova_engine_create_from_ssp");
-        g_last_error_msg = "Unknown exception";
+    return nova_engine_create_from_ssp_with_algorithm(ssp_path, step_size, nullptr);
+}
+
+extern "C" NOVA_API nova_engine_t* nova_engine_create_from_ssp_with_algorithm(
+    const char* ssp_path, double step_size, const nova_algorithm_config_t* config) {
+    if (!ssp_path) {
+        g_last_error_msg = "SSP path is null";
         return nullptr;
     }
+    std::unique_ptr<nova_simulation_structure_t> ss(nova_simulation_structure_load_ssp(ssp_path));
+    return ss ? nova_engine_create_with_algorithm(ss.get(), step_size, config) : nullptr;
 }
 
 extern "C" NOVA_API void nova_engine_destroy(nova_engine_t* sim) {
@@ -210,29 +257,51 @@ extern "C" NOVA_API bool nova_engine_load_scenario(nova_engine_t* sim, const cha
     }
 }
 
-extern "C" NOVA_API bool nova_engine_init(nova_engine_t* sim, double start_time, const char* parameter_set) {
+template<class Operation>
+static bool run_engine_operation(nova_engine_t* sim, Operation operation, const char* unknown_error) {
     try {
-        if (parameter_set && std::string(parameter_set) != "") {
-            sim->sim->init(start_time, std::string(parameter_set));
-        } else {
-            sim->sim->init(start_time, std::nullopt);
+        if (!sim || !sim->sim) {
+            throw std::invalid_argument("Simulation engine is null");
         }
+        operation(*sim->sim);
+        g_last_error_msg.clear();
         return true;
+    } catch (const std::exception& e) {
+        g_last_error_msg = e.what();
     } catch (...) {
-        return false;
+        g_last_error_msg = unknown_error;
     }
+    return false;
+}
+
+extern "C" NOVA_API bool nova_engine_init(nova_engine_t* sim, double start_time, const char* parameter_set) {
+    return run_engine_operation(sim, [&](nova_engine& engine) {
+        if (parameter_set && *parameter_set) {
+            engine.init(start_time, std::string(parameter_set));
+        } else {
+            engine.init(start_time, std::nullopt);
+        }
+    }, "Unknown error during Nova initialization");
 }
 
 extern "C" NOVA_API double nova_engine_step(nova_engine_t* sim, unsigned int num_steps) {
-    return sim->sim->step(num_steps);
+    double time = std::numeric_limits<double>::quiet_NaN();
+    run_engine_operation(sim, [&](nova_engine& engine) {
+        time = engine.step(num_steps);
+    }, "Unknown error during Nova step");
+    return time;
 }
 
 extern "C" NOVA_API void nova_engine_step_until(nova_engine_t* sim, double time_point) {
-    sim->sim->step_until(time_point);
+    run_engine_operation(sim, [&](nova_engine& engine) {
+        engine.step_until(time_point);
+    }, "Unknown error during Nova step");
 }
 
 extern "C" NOVA_API void nova_engine_step_for(nova_engine_t* sim, double duration) {
-    sim->sim->step_for(duration);
+    run_engine_operation(sim, [&](nova_engine& engine) {
+        engine.step_for(duration);
+    }, "Unknown error during Nova step");
 }
 
 extern "C" NOVA_API void nova_engine_terminate(nova_engine_t* sim) {

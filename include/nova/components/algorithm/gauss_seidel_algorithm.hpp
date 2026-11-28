@@ -50,7 +50,9 @@ public:
     }
 
     void model_instance_added(model_instance* instance) override;
+    void validate_model_order() const;
     double step(double currentTime) override;
+    double step(double currentTime, const std::function<void(const model_instance&)>& transferInputs);
 
 private:
     using instances = std::unordered_map<std::string, model_instance*>;

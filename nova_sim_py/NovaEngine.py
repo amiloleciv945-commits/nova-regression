@@ -1,6 +1,71 @@
 from .lib import dll, NovaLib
 from .NovaSimulationStructure import NovaSimulationStructure
-from ctypes import create_string_buffer, c_size_t, c_bool, c_int, c_void_p, c_double, c_char_p, c_size_t, POINTER, Structure, CFUNCTYPE, byref, c_char
+from ctypes import (
+    CFUNCTYPE, POINTER, Structure, byref, c_bool, c_char_p, c_double, c_int,
+    c_size_t, c_uint, c_void_p, create_string_buffer,
+)
+from math import isnan
+
+
+class _AlgorithmConfig(Structure):
+    _fields_ = [
+        ("type", c_int),
+        ("parallel", c_bool),
+        ("order", POINTER(c_char_p)),
+        ("order_size", c_size_t),
+        ("max_iterations", c_size_t),
+        ("output_holder_type", c_int),
+        ("input_holder_type", c_int),
+    ]
+
+
+def _algorithm_config(algorithm):
+    if isinstance(algorithm, str):
+        algorithm = {"type": algorithm}
+    if not isinstance(algorithm, dict):
+        raise TypeError("algorithm must be a name or a configuration dictionary")
+
+    algorithms = {
+        "fixed_step": (0, {"parallel"}),
+        "gauss_seidel": (1, {"order"}),
+        "strong_coupling": (2, {"parallel", "max_iterations", "output_holder_type", "input_holder_type"}),
+    }
+    kind = algorithm.get("type")
+    if not isinstance(kind, str) or kind not in algorithms:
+        raise ValueError("algorithm type must be fixed_step, gauss_seidel, or strong_coupling")
+    type_id, options = algorithms[kind]
+    unknown = algorithm.keys() - options - {"type"}
+    if unknown:
+        names = ", ".join(sorted(map(repr, unknown)))
+        raise ValueError(f"Unsupported options for {kind}: {names}")
+
+    config = _AlgorithmConfig(type=type_id)
+    if kind == "gauss_seidel":
+        order = algorithm.get("order")
+        if not isinstance(order, (list, tuple)) or not order or any(
+            not isinstance(name, str) or not name or "\0" in name for name in order
+        ):
+            raise ValueError("Gauss-Seidel order must be a nonempty list or tuple of FMU instance names")
+        config.order = (c_char_p * len(order))(*(name.encode() for name in order))
+        config.order_size = len(order)
+        return config
+
+    parallel = algorithm.get("parallel", kind == "fixed_step")
+    if not isinstance(parallel, bool):
+        raise TypeError("algorithm parallel must be a boolean")
+    config.parallel = parallel
+
+    if kind == "strong_coupling":
+        iterations = algorithm.get("max_iterations", 1)
+        if type(iterations) is not int or not 0 <= iterations <= c_size_t(-1).value:
+            raise ValueError("max_iterations must fit in an unsigned size_t")
+        config.max_iterations = iterations
+        for name in ("output_holder_type", "input_holder_type"):
+            value = algorithm.get(name, 0)
+            if type(value) is not int or not 0 <= value <= 3:
+                raise ValueError(f"{name} must be an integer from 0 to 3")
+            setattr(config, name, value)
+    return config
 
 
 class SimulationInfo(Structure):
@@ -25,26 +90,35 @@ class ListenerConfig(Structure):
 
 class NovaEngine:
 
-    def __init__(self, step_size: float, ssp_path: str = None, structure: NovaSimulationStructure = None):
-
+    def __init__(self, step_size: float, ssp_path: str = None, structure: NovaSimulationStructure = None,
+                 *, algorithm: str | dict | None = None):
+        """Create an engine. The default algorithm is parallel fixed step."""
+        self.sim = None
         if ssp_path is not None and structure is not None:
             raise ValueError("Only one of 'ssp_path' or 'structure' should be provided.")
+        if ssp_path is None and structure is None:
+            raise ValueError("Either 'ssp_path' or 'structure' must be provided.")
 
         self.listener_configs = {}
+        # The native engine keeps copies of the connections after the structure is freed.
+        self._connection_modifiers = tuple(structure.modifiers) if structure is not None else ()
+        self._supports_algorithm_options = hasattr(dll, "nova_engine_create_with_algorithm")
 
         self._init_simulation = dll.nova_engine_init
         self._init_simulation.argtypes = [c_void_p, c_double, c_char_p]
         self._init_simulation.restype = c_bool
 
         self._step_simulation = dll.nova_engine_step
-        self._step_simulation.argtypes = [c_void_p, c_size_t]
+        self._step_simulation.argtypes = [c_void_p, c_uint]
         self._step_simulation.restype = c_double
 
         self._step_simulation_for = dll.nova_engine_step_for
         self._step_simulation_for.argtypes = [c_void_p, c_double]
+        self._step_simulation_for.restype = None
 
         self._step_simulation_until = dll.nova_engine_step_until
         self._step_simulation_until.argtypes = [c_void_p, c_double]
+        self._step_simulation_until.restype = None
 
         self._get_integer = dll.nova_engine_get_integer
         self._get_integer.argtypes = [c_void_p, c_char_p, c_char_p, POINTER(c_int)]
@@ -93,26 +167,25 @@ class NovaEngine:
         self._remove_listener.argtypes = [c_void_p, c_char_p]
 
         if ssp_path is not None:
-
-            _create_simulation_from_ssp = dll.nova_engine_create_from_ssp
-            _create_simulation_from_ssp.argtypes = [c_char_p, c_double]
-            _create_simulation_from_ssp.restype = c_void_p
-
-            self.sim = _create_simulation_from_ssp(ssp_path.encode(), step_size)
-            if self.sim is None:
-                raise Exception(NovaLib.get_last_error())
-
-        elif structure is not None:
-            _create_simulation_from_structure = dll.nova_engine_create
-            _create_simulation_from_structure.argtypes = [c_void_p, c_double]
-            _create_simulation_from_structure.restype = c_void_p
-
-            self.sim = _create_simulation_from_structure(structure.handle, step_size)
-            if self.sim is None:
-                raise Exception(NovaLib.get_last_error())
-
+            create_name, source_type, source = "nova_engine_create_from_ssp", c_char_p, ssp_path.encode()
         else:
-            raise ValueError("Either 'ssp_path' or 'structure' must be provided.")
+            create_name, source_type, source = "nova_engine_create", c_void_p, structure.handle
+
+        argtypes = [source_type, c_double]
+        args = [source, step_size]
+        if algorithm is not None and algorithm != "fixed_step":
+            config = _algorithm_config(algorithm)
+            create_name += "_with_algorithm"
+            argtypes.append(POINTER(_AlgorithmConfig))
+            args.append(byref(config))
+        create_engine = getattr(dll, create_name, None)
+        if create_engine is None:
+            raise RuntimeError("This libnovac does not support algorithm options. Rebuild or update the native library.")
+        create_engine.argtypes = argtypes
+        create_engine.restype = c_void_p
+        self.sim = create_engine(*args)
+        if self.sim is None:
+            raise RuntimeError(NovaLib.get_last_error())
 
     def add_listener(self, name: str, listener: SimulationListener):
 
@@ -211,13 +284,24 @@ class NovaEngine:
         return self._init_simulation(self.sim, start_time, None if parameter_set is None else parameter_set.encode())
 
     def step(self, num_steps: int = 1) -> float:
-        return self._step_simulation(self.sim, num_steps)
+        time = self._step_simulation(self.sim, num_steps)
+        if isnan(time):
+            raise RuntimeError(NovaLib.get_last_error() or "Nova step failed")
+        return time
 
     def step_for(self, duration: float):
-        self._step_simulation_until(self.sim, duration)
+        self._step_simulation_for(self.sim, duration)
+        self._raise_step_error()
 
     def step_until(self, time_point: float):
         self._step_simulation_until(self.sim, time_point)
+        self._raise_step_error()
+
+    def _raise_step_error(self):
+        if self._supports_algorithm_options:
+            error = NovaLib.get_last_error()
+            if error:
+                raise RuntimeError(error)
 
     def reset(self) -> bool:
         reset_simulation = dll.nova_engine_reset
@@ -240,6 +324,7 @@ class NovaEngine:
 
             destroy_simulation(self.sim)
             self.sim = None
+            self._connection_modifiers = ()
 
     def __enter__(self):
         return self

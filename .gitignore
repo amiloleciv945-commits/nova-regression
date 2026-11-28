@@ -54,3 +54,4 @@ Inject/
 *.bak
 nova_sim_py/binaries/*.old
 nova_sim_py/binaries/*_old*.dll
+nova1127.zip

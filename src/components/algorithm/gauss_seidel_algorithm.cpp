@@ -32,6 +32,12 @@ void gauss_seidel_algorithm::model_instance_added(model_instance* instance)
 
 double gauss_seidel_algorithm::step(double currentTime)
 {
+    return step(currentTime, {});
+}
+
+double gauss_seidel_algorithm::step(
+    double currentTime, const std::function<void(const model_instance&)>& transferInputs)
+{
     if (stepFailed_) {
         throw std::runtime_error("Recreate the engine before retrying a failed Gauss-Seidel step");
     }
@@ -46,6 +52,9 @@ double gauss_seidel_algorithm::step(double currentTime)
     // An exception may leave some models already advanced.
     stepFailed_ = true;
     for (const auto& entry : schedule_) {
+        if (transferInputs) {
+            transferInputs(*entry.instance);
+        }
         for (const auto& update : entry.inputs) {
             update();
         }
@@ -58,8 +67,21 @@ double gauss_seidel_algorithm::step(double currentTime)
     return nextTime;
 }
 
+void gauss_seidel_algorithm::validate_model_order() const
+{
+    for (const auto& name : stepOrder_) {
+        if (!instances_.contains(name)) {
+            throw std::invalid_argument("Gauss-Seidel instance '" + name + "' was not registered");
+        }
+    }
+    if (stepOrder_.size() != instances_.size()) {
+        throw std::invalid_argument("Gauss-Seidel execution order must list every registered instance");
+    }
+}
+
 void gauss_seidel_algorithm::resolve_schedule()
 {
+    validate_model_order();
     for (const auto& [destination, inputs] : links_) {
         if (!instances_.contains(destination)) {
             throw std::invalid_argument("Unknown Gauss-Seidel connection destination: " + destination);
@@ -69,19 +91,12 @@ void gauss_seidel_algorithm::resolve_schedule()
     std::vector<scheduled_instance> schedule;
     schedule.reserve(stepOrder_.size());
     for (const auto& name : stepOrder_) {
-        const auto model = instances_.find(name);
-        if (model == instances_.end()) {
-            throw std::invalid_argument("Gauss-Seidel instance '" + name + "' was not registered");
-        }
-        auto& entry = schedule.emplace_back(scheduled_instance{model->second, {}});
+        auto& entry = schedule.emplace_back(scheduled_instance{instances_.at(name), {}});
         if (const auto links = links_.find(name); links != links_.end()) {
             for (const auto& bind : links->second) {
                 entry.inputs.push_back(bind(instances_));
             }
         }
-    }
-    if (schedule.size() != instances_.size()) {
-        throw std::invalid_argument("Gauss-Seidel execution order must list every registered instance");
     }
     schedule_ = std::move(schedule);
 }

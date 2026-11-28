@@ -1,5 +1,6 @@
 
 #include "nova/engine/nova_engine.hpp"
+#include "nova/components/algorithm/gauss_seidel_algorithm.hpp"
 
 #include "nova/components/recorder/engine_observer.hpp"
 #include "nova/components/logger/logger.hpp"
@@ -27,6 +28,12 @@ struct nova_engine::Impl
         property_t<std::vector<double>>* src_vector = nullptr;
         property_t<std::vector<double>>* dst_vector = nullptr;
         std::function<double(double)> real_modifier;
+
+        bool is_bound() const
+        {
+            return (src_real && dst_real) || (src_int && dst_int) || (src_bool && dst_bool)
+                || (src_string && dst_string) || (src_vector && dst_vector);
+        }
     };
     double lastDelta_{};
     double currentTime_{0};
@@ -36,44 +43,51 @@ struct nova_engine::Impl
 
     scenario scenario_;
     std::unique_ptr<algorithm> algorithm_;
+    gauss_seidel_algorithm* const gaussSeidel_;
     std::vector<std::unique_ptr<model_instance>> instances_;
     std::vector<NovaDataLink> links_;
     std::vector<ResolvedDataLink> resolved_links_;
+    std::unordered_map<const model_instance*, std::vector<std::size_t>> incoming_links_;
     std::unordered_map<std::string, std::shared_ptr<engine_observer>> listeners_;
 
     nova_engine& sim_;
 
+    static void transfer_link(const ResolvedDataLink& link)
+    {
+        if (link.type == "real" && link.src_real && link.dst_real) {
+            const double value = link.src_real->get_value();
+            link.dst_real->set_value(link.real_modifier ? link.real_modifier(value) : value);
+        } else if (link.type == "int" && link.src_int && link.dst_int) {
+            link.dst_int->set_value(link.src_int->get_value());
+        } else if (link.type == "bool" && link.src_bool && link.dst_bool) {
+            link.dst_bool->set_value(link.src_bool->get_value());
+        } else if (link.type == "string" && link.src_string && link.dst_string) {
+            link.dst_string->set_value(link.src_string->get_value());
+        } else if (link.type == "vector" && link.src_vector && link.dst_vector) {
+            link.dst_vector->set_value(link.src_vector->get_value());
+        }
+    }
+
     void transfer_data()
     {
-        for (const auto& rlink : resolved_links_) {
-            if (rlink.type == "real") {
-                if (rlink.src_real && rlink.dst_real) {
-                    double val = rlink.src_real->get_value();
-                    if (rlink.real_modifier) val = rlink.real_modifier(val);
-                    rlink.dst_real->set_value(val);
-                }
-            } else if (rlink.type == "int") {
-                if (rlink.src_int && rlink.dst_int) {
-                    rlink.dst_int->set_value(rlink.src_int->get_value());
-                }
-            } else if (rlink.type == "bool") {
-                if (rlink.src_bool && rlink.dst_bool) {
-                    rlink.dst_bool->set_value(rlink.src_bool->get_value());
-                }
-            } else if (rlink.type == "string") {
-                if (rlink.src_string && rlink.dst_string) {
-                    rlink.dst_string->set_value(rlink.src_string->get_value());
-                }
-            } else if (rlink.type == "vector") {
-                if (rlink.src_vector && rlink.dst_vector) {
-                    rlink.dst_vector->set_value(rlink.src_vector->get_value());
-                }
+        for (const auto& link : resolved_links_) {
+            transfer_link(link);
+        }
+    }
+
+    void transfer_inputs(const model_instance& destination)
+    {
+        const auto incoming = incoming_links_.find(&destination);
+        if (incoming != incoming_links_.end()) {
+            for (const auto index : incoming->second) {
+                transfer_link(resolved_links_[index]);
             }
         }
     }
 
     explicit Impl(nova_engine& sim, std::unique_ptr<algorithm> algorithm)
         : algorithm_(std::move(algorithm))
+        , gaussSeidel_(dynamic_cast<gauss_seidel_algorithm*>(algorithm_.get()))
         , sim_(sim)
     { }
 
@@ -92,14 +106,18 @@ struct nova_engine::Impl
 
             scenario_.apply(currentTime_);
 
-            newT = algorithm_->step(currentTime_);
-
-            transfer_data();
-
-            std::for_each(std::execution::par, instances_.begin(), instances_.end(), [](auto& instance) {
-                instance->get_properties().apply_sets();
-                instance->get_properties().apply_gets();
-            });
+            if (gaussSeidel_ && !incoming_links_.empty()) {
+                newT = gaussSeidel_->step(currentTime_, [this](const model_instance& destination) {
+                    transfer_inputs(destination);
+                });
+            } else {
+                newT = algorithm_->step(currentTime_);
+                transfer_data();
+                std::for_each(std::execution::par, instances_.begin(), instances_.end(), [](auto& instance) {
+                    instance->get_properties().apply_sets();
+                    instance->get_properties().apply_gets();
+                });
+            }
 
             lastDelta_ = newT - currentTime_;
             currentTime_ = newT;
@@ -231,10 +249,16 @@ void nova_engine::init(std::optional<double> startTime, const std::optional<std:
     if (!pimpl_->initialized_) {
 
         pimpl_->resolved_links_.clear();
+        pimpl_->incoming_links_.clear();
         for (const auto& link : pimpl_->links_) {
             auto src_inst = get_instance(link.src_instance);
             auto dst_inst = get_instance(link.dst_instance);
             if (!src_inst || !dst_inst) {
+                if (pimpl_->gaussSeidel_) {
+                    throw std::invalid_argument("Unknown instance in Gauss-Seidel connection "
+                        + link.src_instance + "::" + link.src_variable + " -> "
+                        + link.dst_instance + "::" + link.dst_variable);
+                }
                 log::warn("Invalid link: instance not found (src: {}, dst: {})", link.src_instance, link.dst_instance);
                 continue;
             }
@@ -262,7 +286,15 @@ void nova_engine::init(std::optional<double> startTime, const std::optional<std:
                 rlink.src_vector = src_props.get_vector_property(link.src_variable);
                 rlink.dst_vector = dst_props.get_vector_property(link.dst_variable);
             }
-            pimpl_->resolved_links_.push_back(rlink);
+            if (pimpl_->gaussSeidel_) {
+                if (!rlink.is_bound()) {
+                    throw std::invalid_argument("Missing or mismatched properties for Gauss-Seidel connection "
+                        + link.src_instance + "::" + link.src_variable + " -> "
+                        + link.dst_instance + "::" + link.dst_variable);
+                }
+                pimpl_->incoming_links_[dst_inst].push_back(pimpl_->resolved_links_.size());
+            }
+            pimpl_->resolved_links_.push_back(std::move(rlink));
         }
 
         pimpl_->initialized_ = true;
